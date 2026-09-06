@@ -43,14 +43,14 @@
        "   (put-connection! ...) with [[X]] and the seed url. If nothing substantive, skip it.\n"
        "Keep every card atomic and objective. Then stop. Act via eval only; no prose answers."))
 
-(defn- mcp-json [cfg]
+(defn mcp-json [cfg]
   (json/write-str
    {:mcpServers
     {:researcher {:type "http"
             :url (str "http://" (get-in cfg [:gateway :host] "127.0.0.1")
                       ":" (get-in cfg [:gateway :port] 7777) "/mcp/worker")}}}))
 
-(defn- issue-block [issue]
+(defn issue-block [issue]
   (str "ISSUE #" (:number issue) "\nTITLE: " (:title issue) "\n\n" (:body issue)))
 
 (defn pick
