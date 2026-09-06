@@ -1,6 +1,6 @@
 ;; researcher configuration.
 ;; Paths starting with ~ are expanded to the user's home at load time.
-{:blog {:root "~/andysmith-ai/andysmith.ai"}
+{:blog {:root "~/andysmith-ai/andysmith.ai" :url "https://andysmith.ai"}
  :wiki {:root "~/sm-th/smith-wiki"
         :content "content"}
 

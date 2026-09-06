@@ -7,7 +7,7 @@
   (:require [sci.core :as sci]
             [clojure.string :as str]
             [researcher.index :as index]
-            [researcher.reader :as reader]
+            [researcher.linkwarden :as lw]
             [researcher.graph :as graph]
             [researcher.github :as gh]
             [researcher.wiki :as wiki]))
@@ -45,7 +45,7 @@
   (let [w (when (and wiki-repo branch) (wiki/writer cfg wiki-repo branch))
         read-fns
         {'recall  (fn [q k] (mapv hit->clj (index/recall cfg q k)))
-         'fetch   (fn [url] (reader/readable url))
+         'fetch   (fn [url] (:text (lw/fetch-readable! cfg url {:tags ["research"]})))
          'central (fn [n] (graph/central (graph/load-graph cfg) n))
          'reference-frequency (fn [] (graph/reference-frequency (graph/load-graph cfg)))
          'context (fn [] {:model (get-in cfg [:omp :model]) :profile profile :branch branch})}

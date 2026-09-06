@@ -12,23 +12,26 @@
   (str "You are the PLANNING stage of an OBJECTIVE auto-researcher wiki. The wiki "
        "holds only common, well-established knowledge (concepts/theories), SELECTED "
        "for relevance to Andy Smith's notes — never his opinions or personal theses.\n\n"
-       "Your ONLY tool is `eval`: Clojure evaluated against a granted image "
-       "(deny-by-default). Capabilities:\n"
-       "  (context)             -> model/profile info\n"
-       "  (recall query k)      -> [{:title :kind :source ...}] related corpus\n"
-       "  (fetch url)           -> readable text of a page\n"
-       "  (central n)           -> most-linked existing wiki concepts\n"
-       "  (reference-frequency) -> cited sources by frequency\n"
-       "  (propose-task! {...}) -> file ONE issue; returns {:filed n} or {:refused why}\n\n"
+       "Your ONLY tool is `eval`: Clojure against a granted image (deny-by-default): "
+       "(context), (recall query k), (fetch url), (central n), (reference-frequency), "
+       "(propose-task! {...} -> {:filed n} | {:refused why}).\n\n"
        "Procedure:\n"
-       "1. (recall ...) on the seed to see related corpus and avoid duplicates.\n"
-       "2. Choose ONE googleable, well-established CONCEPT worth its own wiki page, "
-       "relevant to the seed, objective (not the author's opinion), not already covered.\n"
-       "3. Call (propose-task! {:op :create :type :concept :title \"...\" "
-       ":rationale \"objective; how the seed points to it\" :acceptance [\"...\"] "
-       ":seed_note \"<seed url>\" :suggested_sources [\"url\"]}).\n"
-       "Propose AT MOST ONE. If it returns {:refused ...}, stop. Act via eval; do "
-       "not write prose answers."))
+       "1. (recall ...) on the seed to see related corpus and avoid duplicating pages.\n"
+       "2. Choose ONE well-established, objective CONCEPT worth its own page, clearly "
+       "relevant to the seed, not already covered.\n"
+       "3. File a LEAN research TASK — do NOT pre-write the article or guess sources "
+       "(that is the worker's research). The title MUST be imperative, VERB FIRST:\n"
+       "   (propose-task!\n"
+       "     {:op :create :type :concept\n"
+       "      :title \"Research the principle of least privilege\"   ; verb-first imperative\n"
+       "      :rationale \"why it matters objectively + how the seed note points to it\"\n"
+       "      :acceptance [\"objective, no opinions\"\n"
+       "                   \"defines the concept and its core distinctions\"\n"
+       "                   \">=2 cited sources the worker finds\"\n"
+       "                   \"links back to the seed note\"\n"
+       "                   \"one idea per page\"]\n"
+       "      :seed_note \"<seed url>\"})\n\n"
+       "Propose AT MOST ONE. If {:refused ...}, stop. Act via eval; no prose answers."))
 
 (defn- mcp-json [cfg grant]
   (json/write-str
@@ -46,7 +49,8 @@
         tmp  (str (System/getProperty "java.io.tmpdir") "researcher-plan-" (System/currentTimeMillis))]
     (.mkdirs (java.io.File. (str tmp "/.omp")))
     (spit (str tmp "/.omp/mcp.json") (mcp-json cfg "planner"))
-    (let [prompt (str "SEED NOTE\nTITLE: " (:title n) "\nURL: " (:url n) "\n\n"
+    (let [prompt (str "SEED NOTE\nTITLE: " (:title n)
+                      "\nURL: " (str (get-in cfg [:blog :url]) (:url n)) "\n\n"
                       (:body n)
                       "\n\nUse the eval tool to propose one objective concept page.")
           {:keys [exit out err]}
