@@ -31,7 +31,11 @@
  :omp {:model "claude-sonnet-4-5"   ; verify exact catalog id when wiring omp
        :oauth-token-env "ANTHROPIC_OAUTH_TOKEN"}
 
- :planner {:max-tasks-per-note 5}
+ ;; Human-review policy: keep the queue tiny. File at most :max-new-per-run new
+ ;; issues per run, and stay silent once :wip-cap open issues exist.
+ :planner {:max-new-per-run 1
+           :wip-cap 10
+           :max-tasks-per-note 2}
 
  ;; Usage caps (in-memory meter, researcher.budget). The real guard is omp/Claude
  ;; (subscription 5h/weekly quotas) — never starve interactive Claude. OpenRouter

@@ -11,6 +11,21 @@
                                   :headers (H cfg)}))
        "response"))
 
+(defn links
+  "List links, optionally filtered to a collection id."
+  ([cfg] (links cfg nil))
+  ([cfg collection-id]
+   (get (:body (http/json-request {:method :get
+                                   :url (str (base cfg) "/api/v1/links"
+                                             (when collection-id (str "?collectionId=" collection-id)))
+                                   :headers (H cfg)}))
+        "response")))
+
+(defn get-link [cfg id]
+  (:body (http/json-request {:method :get
+                             :url (str (base cfg) "/api/v1/links/" id)
+                             :headers (H cfg)})))
+
 (defn find-or-create-collection
   "Return {:id n} for the named collection, creating it under the existing
    owner if missing."
@@ -27,7 +42,8 @@
         {:id (get-in r [:body "response" "id"])}))))
 
 (defn create-link
-  "Save a URL to Linkwarden. opts: :name :tags [str] :collection {:id n}."
+  "Save a URL to Linkwarden. opts: :name :tags [str] :collection {:id n}.
+   Returns the raw {:status :body} so callers can check success."
   [cfg {:keys [url name tags collection]}]
   (http/json-request {:method :post
                       :url (str (base cfg) "/api/v1/links")

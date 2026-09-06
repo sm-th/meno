@@ -6,6 +6,7 @@
             [researcher.index :as index]
             [researcher.refs :as refs]
             [researcher.budget :as budget]
+            [researcher.diag :as diag]
             [researcher.loop :as lp])
   (:gen-class))
 
@@ -29,6 +30,7 @@
                             (or (nil? a) (= a "newest"))  (refs/ingest-newest! cfg)
                             :else                          (refs/ingest-slug! cfg a)))
                         (budget/report))
+      "diag"   (diag/run)
       (println "usage: clojure -M -m researcher.main [plan|work|launch <p>|index|recall <k>|ingest-refs [all|newest|<slug>]]"))
     (flush)
     nil))
