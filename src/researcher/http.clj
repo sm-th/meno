@@ -23,8 +23,10 @@
       :post (.POST b pub)
       :put  (.PUT b pub)
       :delete (.method b "DELETE" (HttpRequest$BodyPublishers/noBody)))
-    (let [resp (.send (HttpClient/newHttpClient) (.build b)
-                      (HttpResponse$BodyHandlers/ofString))
+    (let [client (-> (HttpClient/newBuilder)
+                     (.followRedirects java.net.http.HttpClient$Redirect/NORMAL)
+                     .build)
+          resp (.send client (.build b) (HttpResponse$BodyHandlers/ofString))
           body (.body resp)]
       {:status (.statusCode resp)
        :body (when (seq body)
