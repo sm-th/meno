@@ -50,6 +50,7 @@
  ;; docs/auth.md. :number is filled once the project is created.
  :projects {:owner "agent-smith-wiki"
             :name "researcher"
+            :human-login "sm-th"      ; personal GitHub login (project WRITER)
             :link-repo "agent-smith-wiki/smith-wiki"
             :token-env "GH_PROJECTS_TOKEN"
             :graphql "https://api.github.com/graphql"

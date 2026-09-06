@@ -61,10 +61,24 @@
   (gql cfg "mutation($p:ID!){ deleteProjectV2(input:{projectId:$p}){ projectV2 { id } } }"
        {:p project-id}))
 
+(defn- user-id [cfg login]
+  (-> (gql cfg "query($l:String!){ user(login:$l){ id } }" {:l login})
+      (get-in ["user" "id"])))
+
+(defn ensure-collaborator!
+  "Add the human's personal account as a WRITER on the project so they can drag
+   cards from their own GitHub (repo-collaboration does NOT grant project access)."
+  [cfg project-id]
+  (when-let [login (get-in cfg [:projects :human-login])]
+    (gql cfg "mutation($p:ID!,$u:ID!){ updateProjectV2Collaborators(input:{projectId:$p,collaborators:[{userId:$u,role:WRITER}]}){ collaborators { totalCount } } }"
+         {:p project-id :u (user-id cfg login)})))
+
 (defn ensure-project!
-  "Find the project by name, or create it. (Linking to the repo needs repo write,
-   which the project-only token lacks by design — link once in the UI.) Returns
-   the project node {id number title}."
+  "Find the project by name, or create it; then ensure the human is a WRITER.
+   (Linking to the repo needs repo write, which the project-only token lacks by
+   design — link once in the UI.) Returns the project node {id number title}."
   [cfg]
-  (or (find-project cfg)
-      (create-project! cfg (get (owner cfg) "id") (get-in cfg [:projects :name]))))
+  (let [p (or (find-project cfg)
+              (create-project! cfg (get (owner cfg) "id") (get-in cfg [:projects :name])))]
+    (ensure-collaborator! cfg (get p "id"))
+    p))
