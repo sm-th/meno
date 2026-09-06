@@ -41,7 +41,7 @@
  :github {:repo "agent-smith-wiki/smith-wiki" :token-env "GH_TOKEN"}
 
  ;; The long-lived door: HTTP MCP server (one eval tool) into the shared image.
- :door {:host "127.0.0.1" :port 7777}
+ :door {:host "127.0.0.1" :port 7777 :nrepl-port 7778}
 
  ;; Usage caps (in-memory meter, researcher.budget). The real guard is omp/Claude
  ;; (subscription 5h/weekly quotas) — never starve interactive Claude. OpenRouter

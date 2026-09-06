@@ -1,10 +1,18 @@
 (ns researcher.mcp
-  "HTTP MCP server = the ONE door into the long-lived researcher image. Exposes a
-   single tool `eval` over Streamable-HTTP (plain JSON-RPC responses). Profile is
-   the URL path: POST /mcp/planner or /mcp/worker -> that grant."
+  "The living researcher image, ONE process:
+     - HTTP MCP door (single tool `eval`) at /mcp/{planner,worker}
+     - an nREPL server (connect your editor to the SAME image)
+     - a stdin REPL (drive it over the process stdin)
+   The HTTP handler rebuilds the grant from live code+config on every request, so
+   `(require ... :reload)` / config edits take effect immediately — no restart.
+   Secrets/state live here; omp sessions hold only the door."
   (:require [clojure.data.json :as json]
+            [clojure.main]
+            [nrepl.server :as nrepl]
+            [cider.nrepl :refer [cider-nrepl-handler]]
             [researcher.config :as config]
-            [researcher.grant :as grant])
+            [researcher.grant :as grant]
+            [researcher.planner :as planner])
   (:import (com.sun.net.httpserver HttpServer HttpHandler HttpExchange)
            (java.net InetSocketAddress))
   (:gen-class))
@@ -42,11 +50,13 @@
     (.sendResponseHeaders ex status (alength bytes))
     (doto (.getResponseBody ex) (.write bytes) (.close))))
 
-(defn- handler [ctx]
+(defn- handler [profile]
   (proxy [HttpHandler] []
     (handle [^HttpExchange ex]
       (try
         (let [req  (json/read-str (slurp (.getRequestBody ex)))
+              ;; live: rebuild grant from current config+code each request
+              ctx  (grant/build (config/load-config) {:profile profile})
               resp (handle-rpc ctx req)]
           (if resp
             (write-json! ex 200 resp)
@@ -56,16 +66,24 @@
                                :error {:code -32603 :message (.getMessage t)}})))
       nil)))
 
+(defn plan!
+  "Trigger one planner tick FROM the living image: the image spawns omp, which
+   calls back into this same image's eval door and files an issue."
+  []
+  (planner/run (config/load-config)))
+
 (defn -main [& _]
-  (let [cfg  (config/load-config)
-        host (get-in cfg [:door :host] "127.0.0.1")
-        port (get-in cfg [:door :port] 7777)
-        srv  (HttpServer/create (InetSocketAddress. ^String host (int port)) 0)]
+  (let [cfg   (config/load-config)
+        host  (get-in cfg [:door :host] "127.0.0.1")
+        port  (get-in cfg [:door :port] 7777)
+        nport (get-in cfg [:door :nrepl-port] 7778)
+        srv   (HttpServer/create (InetSocketAddress. ^String host (int port)) 0)]
     (doseq [profile [:planner :worker]]
-      (.createContext srv (str "/mcp/" (name profile))
-                      (handler (grant/build cfg {:profile profile}))))
+      (.createContext srv (str "/mcp/" (name profile)) (handler profile)))
     (.setExecutor srv nil)
     (.start srv)
-    (println (str "researcher door listening on http://" host ":" port "/mcp/{planner,worker}"))
+    (nrepl/start-server :bind host :port nport :handler cider-nrepl-handler)
+    (println (str "researcher living image | door http://" host ":" port
+                  "/mcp/{planner,worker} | nrepl " host ":" nport))
     (flush)
-    @(promise)))
+    (clojure.main/repl :prompt #(do (print "image=> ") (flush)))))
