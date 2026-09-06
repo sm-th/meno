@@ -3,6 +3,7 @@
         org.babashka/sci {:mvn/version "0.8.43"}}
  :aliases
  {:run  {:main-opts ["-m" "researcher.main"]}
+  :mcp  {:main-opts ["-m" "researcher.mcp"]}
   ;; Live dev REPL: `secretspec run -- clojure -M:repl` (secrets in env), connect
   ;; your editor to the nREPL port; edit .clj + (require ... :reload) to hot-swap.
   :repl {:extra-deps {nrepl/nrepl {:mvn/version "1.3.1"}
