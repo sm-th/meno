@@ -23,8 +23,6 @@
   (str (:rationale task) "\n\n"
        "Acceptance:\n" (str/join "\n" (map #(str "- " %) (:acceptance task))) "\n\n"
        "Seed: " (:seed_note task) "\n"
-       (when (seq (:suggested_sources task))
-         (str "Suggested sources: " (str/join ", " (:suggested_sources task)) "\n"))
        "\n`op: " (name (or (:op task) :create)) " / type: " (name (or (:type task) :concept)) "`"))
 
 (defn- propose-task-fn [cfg]
@@ -57,8 +55,17 @@
          'context (fn [] {:model (get-in cfg [:omp :model]) :profile profile :branch branch})}
         plan-fns  {'propose-task! (propose-task-fn cfg)}
         write-fns (when w
-                    {'put-concept!   (fn [page] (wiki/put-page! w (assoc page :type :concept)))
-                     'put-reference! (fn [page] (wiki/put-page! w (assoc page :type :reference)))})
+                    {'put-concept!
+                     (fn [page]
+                       (let [slug (wiki/slugify (:title page))
+                             f    (java.io.File. (str wiki-repo "/content/" slug ".md"))]
+                         (if (.exists f)
+                           {:skipped slug :reason "canonical concept card already exists — not rewritten"}
+                           (wiki/put-page! w (assoc page :type :concept)))))
+                     'put-connection!
+                     (fn [page] (wiki/put-page! w (assoc page :type :connection)))
+                     'put-reference!
+                     (fn [page] (wiki/put-page! w (assoc page :type :reference)))})
         ns-map (case profile
                  :planner (merge read-fns plan-fns)
                  (merge read-fns plan-fns write-fns))]

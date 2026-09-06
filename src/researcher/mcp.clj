@@ -40,8 +40,15 @@
     "tools/call"
     (if (= "eval" (get params "name"))
       (let [code (get-in params ["arguments" "code"])
-            out (try (pr-str (grant/eval-ctx ctx code))
-                     (catch Throwable t (str "ERROR: " (.getMessage t))))]
+            t0   (System/currentTimeMillis)
+            [ok? out] (try [true (pr-str (grant/eval-ctx ctx code))]
+                           (catch Throwable t [false (str "ERROR: " (.getMessage t))]))
+            ms   (- (System/currentTimeMillis) t0)]
+        (swap! task/trace conj {:code code :ok? ok? :result out :ms ms})
+        (println (str "  eval[" (if ok? "ok" "ERR") " " ms "ms] "
+                      (subs code 0 (min 100 (count code)))
+                      " => " (subs out 0 (min 140 (count out)))))
+        (flush)
         {:jsonrpc "2.0" :id id :result {:content [{:type "text" :text out}]}})
       {:jsonrpc "2.0" :id id :error {:code -32602 :message (str "unknown tool: " (get params "name"))}})
     (when id {:jsonrpc "2.0" :id id :error {:code -32601 :message (str "unknown method: " method)}})))

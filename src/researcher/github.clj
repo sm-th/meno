@@ -59,3 +59,27 @@
     (if (= 200 status)
       body
       (throw (ex-info "github get-issue failed" {:status status :body body})))))
+
+(defn comment-issue!
+  "Post a comment on an issue (used to stream the worker's eval trace for review)."
+  [cfg number body]
+  (let [{:keys [status body]}
+        (http/json-request {:method :post
+                            :url (str api "/repos/" (repo cfg) "/issues/" number "/comments")
+                            :headers (H cfg)
+                            :json {:body body}})]
+    (if (#{200 201} status)
+      body
+      (throw (ex-info "github comment failed" {:status status :body body})))))
+
+(defn close-issue!
+  "Close an issue (used to discard a stale/denied task)."
+  [cfg number]
+  (let [{:keys [status body]}
+        (http/json-request {:method :patch
+                            :url (str api "/repos/" (repo cfg) "/issues/" number)
+                            :headers (H cfg)
+                            :json {:state "closed"}})]
+    (if (= 200 status)
+      body
+      (throw (ex-info "github close-issue failed" {:status status :body body})))))

@@ -20,12 +20,13 @@
 (defn render
   "Render a concept/reference page to Markdown. page: :title :type :description
    :tags :body :sources [url] :collection-url."
-  [{:keys [title type description tags body sources collection-url]}]
+  [{:keys [title type description tags body sources collection-url seed]}]
   (str "---\n"
        "title: " title "\n"
        "type: " (name (or type :concept)) "\n"
        (when description (str "description: " description "\n"))
        (when (seq tags) (str "tags: [" (str/join ", " tags) "]\n"))
+       (when seed (str "seed: " seed "\n"))
        "---\n\n"
        (str/trim (or body "")) "\n"
        (when (seq sources)
