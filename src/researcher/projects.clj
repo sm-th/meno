@@ -57,6 +57,57 @@
            {:p project-id})
       (get-in ["node" "fields" "nodes"])))
 
+(defn add-issue!
+  "Add an issue (by its GraphQL node id) to the project. Lands in No Status =
+   Backlog. Idempotent-ish: GitHub returns the existing item if already added."
+  [cfg project-id issue-node-id]
+  (-> (gql cfg "mutation($p:ID!,$c:ID!){ addProjectV2ItemById(input:{projectId:$p,contentId:$c}){ item { id } } }"
+           {:p project-id :c issue-node-id})
+      (get-in ["addProjectV2ItemById" "item" "id"])))
+
+(defn items
+  "All board items with their Status name and linked issue."
+  [cfg project-id]
+  (-> (gql cfg "query($p:ID!){ node(id:$p){ ... on ProjectV2 { items(first:100){ nodes {
+                 id
+                 status: fieldValueByName(name:\"Status\"){ ... on ProjectV2ItemFieldSingleSelectValue { name } }
+                 content { ... on Issue { number title id url state } } } } } } }"
+           {:p project-id})
+      (get-in ["node" "items" "nodes"])))
+
+(defn todo-items
+  "Open issues the human moved to the approved Status (Todo) — the worker queue."
+  [cfg project-id]
+  (let [want (get-in cfg [:projects :approved-status])]
+    (->> (items cfg project-id)
+         (keep (fn [it]
+                 (when-let [c (get it "content")]
+                   {:item-id (get it "id")   :number (get c "number")
+                    :title   (get c "title") :node-id (get c "id")
+                    :url     (get c "url")   :state (get c "state")
+                    :status  (get-in it ["status" "name"])})))
+         (filter #(and (= want (:status %)) (= "OPEN" (:state %))))
+         vec)))
+
+(defn status-field [cfg project-id]
+  (first (filter #(= "Status" (get % "name")) (fields cfg project-id))))
+
+(defn set-status!
+  "Move an item to a built-in Status option (e.g. \"In Progress\", \"Done\")."
+  [cfg project-id item-id status-name]
+  (let [f   (status-field cfg project-id)
+        opt (first (filter #(= status-name (get % "name")) (get f "options")))]
+    (gql cfg "mutation($p:ID!,$i:ID!,$f:ID!,$o:String!){ updateProjectV2ItemFieldValue(input:{projectId:$p,itemId:$i,fieldId:$f,value:{singleSelectOptionId:$o}}){ projectV2Item { id } } }"
+         {:p project-id :i item-id :f (get f "id") :o (get opt "id")})))
+
+(defn clear-status!
+  "Clear an item's Status -> No Status (= Backlog). Planner files here so new
+   proposals wait for human triage instead of GitHub's default -> Todo workflow."
+  [cfg project-id item-id]
+  (let [f (status-field cfg project-id)]
+    (gql cfg "mutation($p:ID!,$i:ID!,$f:ID!){ clearProjectV2ItemFieldValue(input:{projectId:$p,itemId:$i,fieldId:$f}){ projectV2Item { id } } }"
+         {:p project-id :i item-id :f (get f "id")})))
+
 (defn delete-project! [cfg project-id]
   (gql cfg "mutation($p:ID!){ deleteProjectV2(input:{projectId:$p}){ projectV2 { id } } }"
        {:p project-id}))

@@ -11,6 +11,7 @@
             [researcher.search :as search]
             [researcher.graph :as graph]
             [researcher.github :as gh]
+            [researcher.projects :as projects]
             [researcher.wiki :as wiki]))
 
 (defn- hit->clj [h]
@@ -36,6 +37,9 @@
                                           :body (task-issue-body task)
                                           :labels ["stage:proposed"
                                                    (str "type:" (name (or (:type task) :concept)))]})]
+          (when-let [p (projects/find-project cfg)]
+            (let [item (projects/add-issue! cfg (get p "id") (get issue "node_id"))]
+              (projects/clear-status! cfg (get p "id") item)))
           {:filed (get issue "number") :title (:title task)})))))
 
 (defn build
