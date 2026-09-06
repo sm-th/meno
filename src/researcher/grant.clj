@@ -19,12 +19,17 @@
     {:score (get h "score") :kind (get p "kind") :title (get p "title")
      :url (get p "url") :source (get p "source")}))
 
-(defn- task-issue-body [task]
+(defn- conventions-url [cfg]
+  (str "https://github.com/" (get-in cfg [:github :repo])
+       "/blob/" (get-in cfg [:wiki :base] "main")
+       "/content/" (get-in cfg [:wiki :conventions] "conventions") ".md"))
+
+(defn- task-issue-body [cfg task]
+  ;; The card contract lives once as the wiki Conventions card (linked below),
+  ;; not restated per task; acceptance is intentionally not rendered.
   (str (:rationale task) "\n\n"
-       (when (seq (:acceptance task))
-         (str "Acceptance (specific to this concept):\n"
-              (str/join "\n" (map #(str "- " %) (:acceptance task))) "\n\n"))
        "Seed: " (:seed_note task) "\n"
+       "Cards follow the wiki conventions: " (conventions-url cfg) "\n"
        "\n`op: " (name (or (:op task) :create)) " / type: " (name (or (:type task) :concept)) "`"))
 
 (defn- propose-task-fn [cfg]
@@ -34,7 +39,7 @@
       (if (>= open cap)
         {:refused (str "queue full: " open "/" cap " open issues — triage first")}
         (let [issue (gh/create-issue cfg {:title (:title task)
-                                          :body (task-issue-body task)
+                                          :body (task-issue-body cfg task)
                                           :labels ["stage:proposed"
                                                    (str "type:" (name (or (:type task) :concept)))]})]
           (when-let [p (projects/find-project cfg)]

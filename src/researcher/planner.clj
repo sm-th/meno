@@ -28,10 +28,9 @@
        "      :rationale \"the concept in a line + the note and the exact claim that invoked it\"\n"
        "      :seed_note \"<seed url>\"})\n\n"
        "The universal card contract — encyclopedic, objective, atomic, >=2 cited sources, densely "
-       "[[wikilinked]] — is the worker's STANDING rule, NOT per task. Do NOT restate it. Add "
-       ":acceptance ONLY for something specific to THIS concept (e.g. a common misconception to "
-       "avoid); otherwise omit it. Propose AT MOST ONE. If {:refused ...}, stop. Act via eval; no "
-       "prose answers."))
+       "[[wikilinked]] — is the worker's STANDING rule, NOT per task. Do NOT include acceptance or "
+       "quality criteria in the task; the rationale + seed are enough. Propose AT MOST ONE. If "
+       "{:refused ...}, stop. Act via eval; no prose answers."))
 
 (defn- mcp-json [cfg grant]
   (json/write-str

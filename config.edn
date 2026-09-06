@@ -3,7 +3,8 @@
 {:blog {:root "~/andysmith-ai/andysmith.ai" :url "https://andysmith.ai"}
  :wiki {:root "~/sm-th/smith-wiki"
         :content "content"
-        :base "main"}       ; branch the worker forks pages from and PRs into
+        :base "main"        ; branch the worker forks pages from and PRs into
+        :conventions "conventions"}  ; the meta card holding the card contract
 
  ;; Embeddings: OpenRouter /v1/embeddings, open-weights Qwen3-Embedding-8B
  ;; (hosted now, self-hostable in tower later). Key from secretspec env.
