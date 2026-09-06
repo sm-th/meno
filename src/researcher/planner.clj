@@ -1,128 +1,94 @@
 (ns researcher.planner
-  "Stage 1 (PLANNER): one note -> proposed research tasks (issues).
-   Code does ingest/index/similarity (recall); the LLM makes the meaning
-   calls (perspective, connection judgment, task proposal). Dry-run only
-   assembles and prints the LLM requests it would send."
+  "Stage 1 (PLANNER), objective-wiki edition. From a seed note + dense-recall
+   context, ask omp/Sonnet (headless, no tools) to propose ONE objective CONCEPT
+   worth a wiki page, and file it as a GitHub issue — but only while the review
+   queue is small (WIP cap) and at most :max-new-per-run per run."
   (:require [researcher.git :as git]
             [researcher.note :as note]
-            [researcher.corpus :as corpus]
-            [researcher.llm :as llm]
+            [researcher.index :as index]
+            [researcher.github :as gh]
+            [researcher.budget :as budget]
+            [clojure.java.shell :refer [sh]]
+            [clojure.edn :as edn]
             [clojure.string :as str]))
 
-;; ---------- prompt fragments (code-assembled context) ----------
+(def system-prompt
+  (str "You are the PLANNING stage of an OBJECTIVE auto-researcher wiki. The wiki "
+       "holds only common, well-established knowledge (concepts and theories), "
+       "SELECTED for relevance to Andy Smith's notes — never his opinions or "
+       "personal theses. From the seed note and related corpus, choose ONE "
+       "googleable, objective CONCEPT worth its own wiki page and not obviously "
+       "already covered. Do not research now; only name the concept and why it is "
+       "relevant, objectively.\n\n"
+       "Output ONLY an EDN map, nothing else:\n"
+       "{:op :create :type :concept\n"
+       " :title \"the concept name\"\n"
+       " :rationale \"why it matters, objectively, and how the seed note points to it\"\n"
+       " :acceptance [\"checkable done-conditions for the page\"]\n"
+       " :seed_note \"<seed url>\"\n"
+       " :suggested_sources [\"url\" ...]}\n"
+       "If nothing new is worth adding, output exactly :skip"))
 
-(defn- note-block [n]
-  (str "TITLE: " (:title n) "\n"
-       "URL: " (:url n) "\n"
-       "TAGS: " (str/join ", " (:tags n)) "\n"
-       "DESCRIPTION: " (:description n) "\n\n"
-       "BODY:\n" (:body n)))
+(defn- omp-complete
+  "One headless omp completion (no tools, ephemeral). Returns stdout text."
+  [cfg system user]
+  (let [model (get-in cfg [:omp :model])
+        {:keys [exit out err]}
+        (sh "omp" "-p" "--no-tools" "--no-session" "--no-title"
+            "--model" model "--system-prompt" system :in user)]
+    (budget/add! :llm {:tokens 0 :usd 0.0})
+    (budget/check! (:limits cfg))
+    (if (zero? exit)
+      out
+      (throw (ex-info "omp failed" {:exit exit :err err})))))
 
-(defn- cand-block [label items]
-  (if (seq items)
-    (str label ":\n"
-         (str/join "\n"
-                   (map #(str "  - " (:title %)
-                              " [tags: " (str/join "," (:tags %)) "]"
-                              "  (tag-overlap " (:overlap %) ")")
-                        items)))
-    (str label ": (none surfaced by code-side similarity)")))
+(defn- extract-edn [s]
+  (let [i (.indexOf s "{") j (.lastIndexOf s "}")]
+    (when (and (>= i 0) (> j i)) (subs s i (inc j)))))
 
-(defn- page-list [wiki]
-  (if (seq wiki)
-    (str/join "\n" (map #(str "  - " (:title %)) wiki))
-    "  (wiki is currently empty)"))
+(defn- parse-task [out]
+  (cond
+    (re-find #":skip" out) :skip
+    :else (try (some-> (extract-edn out) edn/read-string) (catch Exception _ nil))))
 
-;; ---------- the three LLM requests ----------
-
-(defn perspective-req [n sim-pages sim-posts model]
-  (llm/request
-   "perspective-select"
-   model
-   (str "You are the PLANNING stage of an auto-researcher that operates ONLY on "
-        "Andy Smith's public notes. From ONE note, choose 2-4 research PERSPECTIVES "
-        "worth investigating: known theories, adjacent fields, or prior art the note "
-        "connects to. Do NOT research now; only name angles. The candidate related "
-        "material below was surfaced by cheap code-side similarity (recall) \u2014 use "
-        "judgment for relevance (precision). Output a short list: perspective + why it "
-        "fits this note.")
-   (str (note-block n) "\n\n"
-        (cand-block "CANDIDATE related wiki pages" sim-pages) "\n\n"
-        (cand-block "CANDIDATE related notes" sim-posts))))
-
-(defn connection-req [n sim-posts model]
-  (llm/request
-   "connection-judge"
-   model
-   (str "You are the PLANNING stage (connection judgment). Given the note and CANDIDATE "
-        "connections surfaced by code-side tag/lexical similarity, judge which are "
-        "MEANINGFUL and NON-OBVIOUS enough to become a research task \u2014 links the note "
-        "itself does not state (serendipity). Reject trivial, duplicate, or already-obvious "
-        "links. Output kept connections, each with a one-line justification.")
-   (str (note-block n) "\n\n"
-        (cand-block "CANDIDATE connections (other notes)" sim-posts))))
-
-(defn propose-req [n wiki max-tasks model]
-  (llm/request
-   "propose-tasks"
-   model
-   (str "You are the PLANNING stage (task proposal). Turn this ONE note into a SMALL, "
-        "bounded set of ATOMIC research tasks for the wiki (max " max-tasks "). Each task "
-        "becomes a GitHub issue. Rules: one idea per task; connect Andy's thinking to known "
-        "theory / prior art; dedup against existing wiki pages; English artifacts. Only "
-        "propose a task if it is genuinely worth asking (gate; fewer is better).\n\n"
-        "Each task is an EDN map:\n"
-        "{:op :create|:expand|:connect|:restructure  ; effect on the wiki graph\n"
-        " :scope :page|:graph\n"
-        " :title \"imperative, specific\"\n"
-        " :rationale \"why, tied to the note\"\n"
-        " :acceptance [\"checkable done-conditions\"]\n"
-        " :source_refs [\"<note-url>\"]\n"
-        " :suggested_links [\"existing page or concept\"]}\n\n"
-        "Output ONLY an EDN vector of task maps.")
-   (str (note-block n) "\n\n"
-        "EXISTING wiki pages (dedup against these):\n" (page-list wiki) "\n\n"
-        "EXISTING open issues: (none)\n\n"
-        "max tasks: " max-tasks)))
-
-;; ---------- loop steps: input -> handle -> record ----------
-
-(defn input [{:keys [cfg] :as ctx}]
+(defn- seed-context [cfg]
   (let [blog (get-in cfg [:blog :root])
-        {:keys [sha subject] :as commit} (git/newest-publish blog)
+        {:keys [sha]} (git/newest-publish blog)
         rel  (first (git/commit-post-files blog sha))
         n    (note/load-note blog rel)
-        wiki (corpus/wiki-pages (get-in cfg [:wiki :root]) (get-in cfg [:wiki :content]))
-        posts (remove #(= (:slug %) (:slug n)) (corpus/blog-posts blog))]
-    (assoc ctx
-           :commit commit
-           :note n
-           :wiki wiki
-           :sim-pages (corpus/similar-by-tags (:tags n) wiki)
-           :sim-posts (corpus/similar-by-tags (:tags n) posts))))
+        hits (index/recall cfg (str (:title n) "\n" (:body n)) 8)]
+    {:note n :hits hits}))
 
-(defn handle [{:keys [cfg note wiki sim-pages sim-posts commit] :as ctx}]
-  (let [jm (get-in cfg [:llm :model :judge])
-        gm (get-in cfg [:llm :model :generate])
-        mx (get-in cfg [:planner :max-tasks-per-note])]
-    (println "\u25B6 Stage 1 PLANNER \u2014 ingesting ONE note (per publish commit)")
-    (println "  commit:" (:sha commit) "\u2014" (:subject commit))
-    (println "  note:  " (:title note) " " (:url note))
-    (println "  tags:  " (str/join ", " (:tags note)))
-    (println "  corpus: wiki-pages=" (count wiki)
-             " tag-similar-notes=" (count sim-posts)
-             " tag-similar-pages=" (count sim-pages))
-    (println)
-    (llm/ask (perspective-req note sim-pages sim-posts jm))
-    (llm/ask (connection-req note sim-posts jm))
-    (llm/ask (propose-req note wiki mx gm))
-    ctx))
+(defn- render-user [note hits]
+  (str "SEED NOTE\nTITLE: " (:title note) "\nURL: " (:url note) "\n\n" (:body note)
+       "\n\nRELATED CORPUS (dense recall):\n"
+       (str/join "\n" (map #(str "  - [" (get-in % ["payload" "kind"]) "] "
+                                 (get-in % ["payload" "title"]))
+                           hits))))
 
-(defn record [ctx]
-  (println (apply str (repeat 66 \=)))
-  (println "RECORD  \u25B8 dry-run: LLM disabled \u2192 0 tasks materialized; no issues created.")
-  (println "         The requests above are exactly what Stage 1 would send.")
-  (println)
-  ctx)
+(defn- issue-body [task]
+  (str (:rationale task) "\n\n"
+       "Acceptance:\n"
+       (str/join "\n" (map #(str "- " %) (:acceptance task))) "\n\n"
+       "Seed: " (:seed_note task) "\n"
+       "Suggested sources: " (str/join ", " (:suggested_sources task)) "\n\n"
+       "`op: " (name (:op task)) " / type: " (name (:type task)) "`"))
 
-(def steps {:input input :handle handle :record record})
+(defn run [cfg]
+  (budget/reset-run!)
+  (let [open (gh/open-issues cfg)
+        cap  (get-in cfg [:planner :wip-cap])]
+    (if (>= (count open) cap)
+      (println "queue full:" (count open) "open issues (cap" cap ") — staying silent")
+      (let [{:keys [note hits]} (seed-context cfg)
+            out  (omp-complete cfg system-prompt (render-user note hits))
+            task (parse-task out)]
+        (cond
+          (= task :skip) (println "planner: nothing new worth adding")
+          (map? task)
+          (let [issue (gh/create-issue cfg {:title (:title task)
+                                            :body (issue-body task)
+                                            :labels ["stage:proposed" "type:concept"]})]
+            (println "filed issue #" (get issue "number") "—" (:title task)))
+          :else (println "planner: could not parse omp output:\n" out))
+        (budget/report)))))
