@@ -45,6 +45,16 @@
  ;; GitHub issues = the task queue (planner files, you triage, worker executes).
  :github {:repo "agent-smith-wiki/smith-wiki" :token-env "GH_TOKEN"}
 
+ ;; GitHub Projects v2 = the approval BOARD. Separate CLASSIC token (`project`
+ ;; scope) via GraphQL — fine-grained PATs can't grant user-owned Projects. See
+ ;; docs/auth.md. :number is filled once the project is created.
+ :projects {:owner "agent-smith-wiki"
+            :number nil
+            :token-env "GH_PROJECTS_TOKEN"
+            :graphql "https://api.github.com/graphql"
+            :approved-status "Todo"
+            :backlog-status "Backlog"}
+
  ;; The long-lived door: HTTP MCP server (one eval tool) into the shared image.
  :door {:host "127.0.0.1" :port 7777 :nrepl-port 7778}
 
