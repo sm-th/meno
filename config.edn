@@ -9,6 +9,7 @@
  :embed {:base-url "https://openrouter.ai/api/v1"
          :model "qwen/qwen3-embedding-8b"
          :dim 4096
+         :price-per-token 1.0e-8   ; $0.01 / 1M tokens (qwen3-embedding-8b)
          :api-key-env "OPENROUTER_API_KEY"}
 
  ;; Managed Qdrant Cloud (no local DB). URL + key from secretspec env.
@@ -23,6 +24,18 @@
        :oauth-token-env "ANTHROPIC_OAUTH_TOKEN"}
 
  :planner {:max-tasks-per-note 5}
+
+ ;; Usage caps (in-memory meter, researcher.budget). The real guard is omp/Claude
+ ;; (subscription 5h/weekly quotas) — never starve interactive Claude. OpenRouter
+ ;; embeddings are balance-capped already, so their cap is just a safety net.
+ :limits {;; omp/Claude — the one that matters (enforced when Step-2 wires omp):
+          :omp-max-sessions 3      ; per run
+          :llm-usd 0.50            ; per-run omp spend cap
+          :llm-quota-reserve 0.5   ; stop if <50% of the 5h Claude window remains
+          ;; OpenRouter embeddings — safety net (balance-capped anyway):
+          :embed-tokens 300000
+          :embed-usd 0.05
+          :total-usd 1.00}
 
  ;; microsandbox (msb 0.6.16) launch profiles.
  ;; Only the WORKER needs a microVM (broad web egress + omp). The PLANNER is
