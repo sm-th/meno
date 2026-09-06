@@ -37,6 +37,9 @@
            :wip-cap 10
            :max-tasks-per-note 2}
 
+ ;; GitHub issues = the task queue (planner files, you triage, worker executes).
+ :github {:repo "sm-th/smith-wiki" :token-env "GH_TOKEN"}
+
  ;; Usage caps (in-memory meter, researcher.budget). The real guard is omp/Claude
  ;; (subscription 5h/weekly quotas) — never starve interactive Claude. OpenRouter
  ;; embeddings are balance-capped already, so their cap is just a safety net.
