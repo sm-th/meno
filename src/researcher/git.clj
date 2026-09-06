@@ -4,7 +4,7 @@
             [clojure.string :as str]))
 
 (defn- g [repo & args]
-  (apply sh "git" "-C" repo args))
+  (apply sh "git" "-c" "safe.directory=*" "-C" repo args))
 
 (defn publish-commits
   "publish: commits, newest-first. With `since` (a sha), only commits after it."
