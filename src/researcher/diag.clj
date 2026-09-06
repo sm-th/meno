@@ -27,3 +27,13 @@
     (let [ls (lw/links c)]
       (println "  count:" (count ls))
       (doseq [l (take 10 ls)] (println "  " (get l "id") (get l "url"))))))
+
+(defn dedup-collections!
+  "Keep the first collection named `name`, delete the rest (fix accidental dups)."
+  [name]
+  (let [c (cfg)
+        cols (filter #(= (get % "name") name) (lw/collections c))
+        [keep & dups] cols]
+    (println "keeping" (get keep "id") "deleting" (mapv #(get % "id") dups))
+    (doseq [d dups] (lw/delete-collection c (get d "id")))
+    (println "remaining:" (mapv (juxt #(get % "id") #(get % "name")) (lw/collections c)))))

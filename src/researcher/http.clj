@@ -21,7 +21,8 @@
     (case (or method :get)
       :get  (.GET b)
       :post (.POST b pub)
-      :put  (.PUT b pub))
+      :put  (.PUT b pub)
+      :delete (.method b "DELETE" (HttpRequest$BodyPublishers/noBody)))
     (let [resp (.send (HttpClient/newHttpClient) (.build b)
                       (HttpResponse$BodyHandlers/ofString))
           body (.body resp)]

@@ -26,6 +26,11 @@
                              :url (str (base cfg) "/api/v1/links/" id)
                              :headers (H cfg)})))
 
+(defn delete-collection [cfg id]
+  (http/json-request {:method :delete
+                      :url (str (base cfg) "/api/v1/collections/" id)
+                      :headers (H cfg)}))
+
 (defn find-or-create-collection
   "Return {:id n} for the named collection, creating it under the existing
    owner if missing."
