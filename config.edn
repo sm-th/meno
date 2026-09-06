@@ -49,9 +49,11 @@
  ;; scope) via GraphQL — fine-grained PATs can't grant user-owned Projects. See
  ;; docs/auth.md. :number is filled once the project is created.
  :projects {:owner "agent-smith-wiki"
-            :number nil
+            :name "researcher"
+            :link-repo "agent-smith-wiki/smith-wiki"
             :token-env "GH_PROJECTS_TOKEN"
             :graphql "https://api.github.com/graphql"
+            :statuses ["Backlog" "Todo" "In Progress" "In Review" "Done" "Denied"]
             :approved-status "Todo"
             :backlog-status "Backlog"}
 
