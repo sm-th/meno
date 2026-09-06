@@ -4,6 +4,7 @@
             [researcher.worker :as worker]
             [researcher.sandbox :as sandbox]
             [researcher.index :as index]
+            [researcher.refs :as refs]
             [researcher.budget :as budget]
             [researcher.loop :as lp])
   (:gen-class))
@@ -21,6 +22,13 @@
       "recall" (do (budget/reset-run!)
                    (index/recall-newest cfg (Integer/parseInt (or (second args) "8")))
                    (budget/report))
-      (println "usage: clojure -M -m researcher.main [plan|work|launch <profile>|index|recall <k>]"))
+      "ingest-refs" (do (budget/reset-run!)
+                        (let [a (second args)]
+                          (cond
+                            (= a "all")                   (println "urls:" (refs/ingest-all! cfg))
+                            (or (nil? a) (= a "newest"))  (refs/ingest-newest! cfg)
+                            :else                          (refs/ingest-slug! cfg a)))
+                        (budget/report))
+      (println "usage: clojure -M -m researcher.main [plan|work|launch <p>|index|recall <k>|ingest-refs [all|newest|<slug>]]"))
     (flush)
     nil))
