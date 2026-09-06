@@ -5,11 +5,11 @@
 
 (defonce ^:private state (atom nil))
 
-(defn reset! []
+(defn reset-run! []
   (reset! state {:embed {:tokens 0 :usd 0.0 :calls 0}
                  :llm   {:tokens 0 :usd 0.0 :calls 0}}))
 
-(defn- ensure! [] (when (nil? @state) (reset!)))
+(defn- ensure! [] (when (nil? @state) (reset-run!)))
 
 (defn add!
   "kind = :embed | :llm ; usage = {:tokens n :usd x}."
