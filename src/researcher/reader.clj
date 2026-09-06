@@ -6,6 +6,6 @@
 
 (defn readable [url]
   (let [{:keys [status body]}
-        (http/json-request {:method :get :url (str "https://r.jina.ai/" url)})]
+        (http/json-request {:method :get :url (str "https://r.jina.ai/" url) :timeout 30})]
     (when (= 200 status)
       (if (string? body) body (str body)))))

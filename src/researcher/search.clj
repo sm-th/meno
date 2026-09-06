@@ -1,6 +1,6 @@
 (ns researcher.search
   "Web search via Tavily (legit, agent-optimized, free tier). Returns only
-   {:title :url :snippet}; page content is fetched via Linkwarden."
+   {:title :url :snippet}; page content is fetched separately (Jina reader)."
   (:require [researcher.http :as http]))
 
 (defn web

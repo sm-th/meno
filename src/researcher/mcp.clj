@@ -104,7 +104,7 @@
         srv   (HttpServer/create (InetSocketAddress. ^String host (int port)) 0)]
     (doseq [profile [:planner :worker]]
       (.createContext srv (str "/mcp/" (name profile)) (handler profile)))
-    (.setExecutor srv nil)
+    (.setExecutor srv (java.util.concurrent.Executors/newFixedThreadPool 4))
     (.start srv)
     (nrepl/start-server :bind host :port nport :handler cider-nrepl-handler)
     (println (str "researcher living image | gateway http://" host ":" port

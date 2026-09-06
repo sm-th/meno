@@ -1,9 +1,8 @@
 (ns researcher.refs
-  "Reference ingestion: URLs cited in notes -> saved to Linkwarden (durable) and
-   chunk-embedded into Qdrant as kind=reference, so research ticks can ground on
-   the primary sources, not only the notes."
-  (:require [researcher.linkwarden :as lw]
-            [researcher.reader :as reader]
+  "Reference ingestion: URLs cited in notes -> chunk-embedded into Qdrant as
+   kind=reference, so research ticks can ground on the primary sources, not only
+   the notes. Text via Jina reader; nothing is written to Linkwarden."
+  (:require [researcher.reader :as reader]
             [researcher.chunk :as chunk]
             [researcher.embed :as embed]
             [researcher.qdrant :as qdrant]
@@ -35,16 +34,14 @@
        distinct))
 
 (defn ingest-note-refs!
-  "Save + embed every external reference cited by `note`. Returns url count."
+  "Chunk-embed every external reference cited by `note` into Qdrant
+   (kind=reference) so ticks can ground on primary sources. Returns url count."
   [cfg note]
-  (let [coll (lw/find-or-create-collection cfg (get-in cfg [:linkwarden :collection]))
-        urls (take (get-in cfg [:refs :max-refs-per-note] 10) (note-urls note))]
+  (let [urls (take (get-in cfg [:refs :max-refs-per-note] 10) (note-urls note))]
     (when (seq urls)
       (qdrant/ensure-collection! cfg (get-in cfg [:embed :dim])))
     (doseq [u urls]
       (println "  ref:" u)
-      (lw/create-link cfg {:url u :name (str "ref: " (:title note))
-                           :tags ["reference" "auto"] :collection coll})
       (if-let [text (reader/readable u)]
         (let [cs   (chunk/chunks text
                                  (get-in cfg [:refs :chunk-chars] 3200)

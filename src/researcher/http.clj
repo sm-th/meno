@@ -10,12 +10,12 @@
   "Perform an HTTP request. Opts: :method (:get/:post/:put/:patch/:delete), :url, :headers map,
    :json (clj data serialized as the request body).
    Returns {:status int :body parsed-json-or-raw-string}."
-  [{:keys [method url headers json]}]
+  [{:keys [method url headers json timeout]}]
   (let [b (HttpRequest/newBuilder (URI/create url))
         pub (if json
               (HttpRequest$BodyPublishers/ofString (json/write-str json))
               (HttpRequest$BodyPublishers/noBody))]
-    (.timeout b (Duration/ofSeconds 120))
+    (.timeout b (Duration/ofSeconds (long (or timeout 120))))
     (.header b "Content-Type" "application/json")
     (doseq [[k v] headers] (.header b (name k) (str v)))
     (case (or method :get)
