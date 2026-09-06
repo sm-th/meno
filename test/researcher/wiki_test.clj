@@ -8,6 +8,13 @@
   (is (= "least-privilege" (wiki/slugify "  Least   Privilege  ")))
   (is (= "a-b-c" (wiki/slugify "a/b/c"))))
 
+(deftest card-routing-by-type
+  (is (= "content/concepts/x.md"    (wiki/card-rel :concept "x")))
+  (is (= "content/references/y.md"  (wiki/card-rel :reference "y")))
+  (is (= "content/connections/z.md" (wiki/card-rel :connection "z")))
+  (is (= "content/meta/m.md"        (wiki/card-rel :meta "m")))
+  (is (= "content/concepts/d.md"    (wiki/card-rel nil "d")) "defaults to concepts"))
+
 (deftest render-concept
   (let [md (wiki/render {:title "Least privilege" :type :concept
                          :tags ["security" "access"]

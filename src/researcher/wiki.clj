@@ -43,14 +43,22 @@
 (defn ensure-branch! [{:keys [repo branch]}]
   (git! repo "checkout" "-B" branch))
 
+(def section
+  "Wiki subfolder per card type — keeps meta/concepts/references/connections apart."
+  {:concept "concepts" :reference "references" :connection "connections" :meta "meta"})
+
+(defn card-rel [type slug]
+  (str "content/" (get section (or type :concept) "concepts") "/" slug ".md"))
+
 (defn put-page!
-  "Write/overwrite a page on the writer's branch and commit. Returns page meta."
+  "Write/overwrite a card on the writer's branch and commit. Returns page meta."
   [{:keys [cfg repo branch] :as w} page]
   (let [slug (slugify (:title page))
-        rel  (str "content/" slug ".md")
+        rel  (card-rel (:type page) slug)
         name  (get-in cfg [:wiki :author-name]  "smith-wiki-bot")
         email (get-in cfg [:wiki :author-email] "bot@smith.wiki")]
     (ensure-branch! w)
+    (io/make-parents (io/file repo rel))
     (spit (str repo "/" rel) (render page))
     (git! repo "add" rel)
     (git! repo
@@ -98,10 +106,10 @@
   (git! repo "-c" (auth-header cfg) "push" "-u" "origin" branch))
 
 (defn page-titles
-  "Slugs of existing wiki pages under content/ (dedup context for the worker)."
+  "Slugs of existing wiki cards (recursively under content/) — dedup context."
   [repo]
   (let [dir (io/file repo "content")]
     (when (.isDirectory dir)
-      (->> (.listFiles dir)
-           (filter #(str/ends-with? (.getName %) ".md"))
+      (->> (file-seq dir)
+           (filter #(and (.isFile %) (str/ends-with? (.getName %) ".md")))
            (mapv #(str/replace (.getName %) #"\.md$" ""))))))

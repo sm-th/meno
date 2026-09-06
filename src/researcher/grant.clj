@@ -65,7 +65,7 @@
                     {'put-concept!
                      (fn [page]
                        (let [slug (wiki/slugify (:title page))
-                             f    (java.io.File. (str wiki-repo "/content/" slug ".md"))]
+                             f    (java.io.File. (str wiki-repo "/" (wiki/card-rel :concept slug)))]
                          (if (.exists f)
                            {:skipped slug :reason "canonical concept card already exists — not rewritten"}
                            (wiki/put-page! w (assoc page :type :concept)))))
