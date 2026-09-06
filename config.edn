@@ -25,6 +25,11 @@
  ;; Reference ingestion: extract cited URLs, save to Linkwarden, chunk-embed.
  :refs {:chunk-chars 3200 :chunk-overlap 300 :max-refs-per-note 10}
 
+ ;; Web search: Tavily (free tier). Returns URLs; content fetched via Linkwarden.
+ :search {:endpoint "https://api.tavily.com/search"
+          :api-key-env "TAVILY_API_KEY"
+          :max-results 5}
+
  ;; All LLM reasoning goes through omp (Claude). Model: Sonnet (inexpensive) —
  ;; watch quality AND cost closely on first runs. Auth via secretspec env
  ;; ANTHROPIC_OAUTH_TOKEN (claude setup-token).

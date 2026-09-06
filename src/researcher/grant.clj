@@ -8,6 +8,7 @@
             [clojure.string :as str]
             [researcher.index :as index]
             [researcher.linkwarden :as lw]
+            [researcher.search :as search]
             [researcher.graph :as graph]
             [researcher.github :as gh]
             [researcher.wiki :as wiki]))
@@ -46,6 +47,7 @@
         read-fns
         {'recall  (fn [q k] (mapv hit->clj (index/recall cfg q k)))
          'fetch   (fn [url] (:text (lw/fetch-readable! cfg url {:tags ["research"]})))
+         'search  (fn [q] (search/web cfg q))
          'central (fn [n] (graph/central (graph/load-graph cfg) n))
          'reference-frequency (fn [] (graph/reference-frequency (graph/load-graph cfg)))
          'context (fn [] {:model (get-in cfg [:omp :model]) :profile profile :branch branch})}
