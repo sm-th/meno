@@ -1,0 +1,46 @@
+;; researcher configuration.
+;; Paths starting with ~ are expanded to the user's home at load time.
+{:blog {:root "~/andysmith-ai/andysmith.ai"}
+ :wiki {:root "~/sm-th/smith-wiki"
+        :content "content"}
+
+ ;; LLM stays DISABLED for now: the dry-run only assembles and prints the
+ ;; requests it *would* send. Two model tiers per the code/LLM split:
+ ;; cheap judge calls (recall->precision gates) vs the generative proposal.
+ :llm {:enabled false
+       :host "<llm-host>"
+       :model {:judge "smol" :generate "default"}}
+
+ :planner {:max-tasks-per-note 5}
+
+ ;; microsandbox (msb 0.6.16) launch profiles.
+ ;; Only the WORKER needs a microVM (broad web egress + omp). The PLANNER is
+ ;; trusted host code; its profile here is kept for optional isolation only.
+ ;;
+ ;; Security model relied upon:
+ ;;  - egress allowlist:  --net-default-egress deny  +  --net-rule allow@HOST
+ ;;  - network-bound secrets: --secret ENV@HOST  (never written to VM disk;
+ ;;    only delivered toward the listed hosts) so a malicious fetched page
+ ;;    cannot exfiltrate the GitHub token even with broad `public` egress.
+ :sandbox
+ {:image "researcher:latest"
+  :profiles
+  {:planner
+   {:mounts  [{:src "~/andysmith-ai/andysmith.ai" :dst "/repos/blog" :ro true}]
+    :net-default "deny"
+    :allow   [{:host "<llm-host>"     :ports "tcp:443"}
+              {:host "api.github.com" :ports "tcp:443"}]
+    :secrets [{:env "LLM_API_KEY"     :hosts ["<llm-host>"]}
+              {:env "GH_TOKEN_ISSUES" :hosts ["api.github.com"]}]
+    :max-duration "10m" :idle-timeout "3m"}
+
+   :worker
+   {:mounts  [{:src "~/andysmith-ai/andysmith.ai" :dst "/repos/blog" :ro true}]
+    ;; wiki is cloned fresh and baked in before boot (isolation, no host coupling)
+    :copy-wiki "<fresh-clone smith-wiki>:/repos/wiki"
+    :net-default "deny"
+    :allow   [{:host "public" :ports nil}]   ; broad web egress to fetch sources
+    :secrets [{:env "LLM_API_KEY"   :hosts ["<llm-host>"]}
+              {:env "GH_TOKEN_RW"   :hosts ["api.github.com"]}
+              {:env "SEARCH_API_KEY" :hosts ["<search-host>"]}]
+    :max-duration "30m" :idle-timeout "5m"}}}}
