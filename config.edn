@@ -4,12 +4,23 @@
  :wiki {:root "~/sm-th/smith-wiki"
         :content "content"}
 
- ;; LLM stays DISABLED for now: the dry-run only assembles and prints the
- ;; requests it *would* send. Two model tiers per the code/LLM split:
- ;; cheap judge calls (recall->precision gates) vs the generative proposal.
- :llm {:enabled false
-       :host "<llm-host>"
-       :model {:judge "smol" :generate "default"}}
+ ;; Embeddings: OpenRouter /v1/embeddings, open-weights Qwen3-Embedding-8B
+ ;; (hosted now, self-hostable in tower later). Key from secretspec env.
+ :embed {:base-url "https://openrouter.ai/api/v1"
+         :model "qwen/qwen3-embedding-8b"
+         :dim 4096
+         :api-key-env "OPENROUTER_API_KEY"}
+
+ ;; Managed Qdrant Cloud (no local DB). URL + key from secretspec env.
+ :qdrant {:url-env "QDRANT_URL"
+          :api-key-env "QDRANT_API_KEY"
+          :collection "corpus"}
+
+ ;; All LLM reasoning goes through omp (Claude). Model: Sonnet (inexpensive) —
+ ;; watch quality AND cost closely on first runs. Auth via secretspec env
+ ;; ANTHROPIC_OAUTH_TOKEN (claude setup-token).
+ :omp {:model "claude-sonnet-4-5"   ; verify exact catalog id when wiring omp
+       :oauth-token-env "ANTHROPIC_OAUTH_TOKEN"}
 
  :planner {:max-tasks-per-note 5}
 

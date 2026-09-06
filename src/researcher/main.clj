@@ -3,6 +3,7 @@
             [researcher.planner :as planner]
             [researcher.worker :as worker]
             [researcher.sandbox :as sandbox]
+            [researcher.index :as index]
             [researcher.loop :as lp])
   (:gen-class))
 
@@ -13,6 +14,8 @@
       "plan"   (lp/tick planner/steps {:cfg cfg})
       "work"   (worker/dry-run cfg (second args))
       "launch" (sandbox/print-launch cfg (keyword (or (second args) "worker")) ["work" "N"])
-      (println "usage: clojure -M -m researcher.main [plan|work|launch <profile>]"))
+      "index"  (println "indexed" (index/build! cfg) "docs into Qdrant")
+      "recall" (index/recall-newest cfg (Integer/parseInt (or (second args) "8")))
+      (println "usage: clojure -M -m researcher.main [plan|work|launch <profile>|index|recall <k>]"))
     (flush)
     nil))
