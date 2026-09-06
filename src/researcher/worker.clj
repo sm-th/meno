@@ -68,74 +68,92 @@
 (defn- trunc [s n]
   (let [s (str s)] (if (> (count s) n) (str (subs s 0 n) " …[+" (- (count s) n) "]") s)))
 
-(defn- run-comment
-  "Markdown audit of a worker run for the issue: PR/branch, cost, and the full
-   eval trace + omp output (collapsed)."
-  [issue out result]
-  (let [steps @task/trace
-        b     (budget/snapshot)]
-    (str "## 🤖 Worker run — issue #" (:number issue) "\n\n"
-         (if (:pr result)
-           (str "**PR:** " (:pr result) "  ·  branch `" (:branch result) "`\n\n")
-           "**No page written** — the branch had no commits.\n\n")
-         "**eval calls:** " (count steps)
-         "  ·  **embed cost:** $" (format "%.5f" (double (get-in b [:embed :usd])))
-         " (" (get-in b [:embed :tokens]) " tok)"
-         "  ·  Claude reasoning on subscription quota (not $-metered)\n\n"
-         "<details><summary>eval trace (" (count steps) " calls)</summary>\n\n"
+(defn- trace-md []
+  (let [steps @task/trace]
+    (str "**eval calls:** " (count steps) "\n\n"
          (str/join "\n"
                    (map-indexed
                     (fn [i s]
                       (str (inc i) ". `[" (if (:ok? s) "ok" "ERR") " " (:ms s) "ms]`\n"
                            "```clojure\n" (trunc (:code s) 700) "\n```\n"
                            "→ " (trunc (:result s) 400) "\n"))
-                    steps))
-         "\n</details>\n\n"
-         "<details><summary>omp final output</summary>\n\n```\n" (trunc out 3000) "\n```\n</details>")))
+                    steps)))))
+
+(defn- run-comment
+  "Live/final audit for the issue: status, cost, eval trace so far, and (at the
+   end) the omp output and PR/branch outcome."
+  [issue {:keys [status out result]}]
+  (let [b (budget/snapshot)]
+    (str "## 🤖 Worker — issue #" (:number issue) "  "
+         (case status :running "⏳ running…" :done "✅ done" (str status)) "\n\n"
+         (when result
+           (cond (:pr result)    (str "**PR:** " (:pr result) "  ·  branch `" (:branch result) "`\n\n")
+                 (:error result) (str "**push/PR failed:** " (:error result)
+                                      "  ·  cards committed on `" (:branch result) "`\n\n")
+                 :else           "**No page written** — the branch had no commits.\n\n"))
+         "**embed cost:** $" (format "%.5f" (double (get-in b [:embed :usd])))
+         " (" (get-in b [:embed :tokens]) " tok)  ·  Claude on subscription quota\n\n"
+         "<details" (when (= status :done) " open") "><summary>eval trace</summary>\n\n"
+         (trace-md)
+         "\n</details>"
+         (when out (str "\n\n<details><summary>omp final output</summary>\n\n```\n"
+                        (trunc out 3000) "\n```\n</details>")))))
 
 (defn run
-  "Execute one approved issue map {:number :title :body :item-id?}. Launches the
-   worker omp session, then pushes the branch and opens a PR. Returns
-   {:issue n :branch b :pr url} or {:issue n :no-write true}."
+  "Execute one approved issue map {:number :title :body :item-id?}. Streams the
+   eval trace to a live-updated issue comment, then pushes the branch and opens a
+   PR. Returns {:issue n :branch b :pr url} | {:error ...} | {:no-write true}."
   [cfg issue]
   (let [branch (str (get-in cfg [:worker :branch-prefix] "researcher/issue-") (:number issue))
         base   (get-in cfg [:wiki :base] "main")
         repo   (wiki/prepare-branch! cfg branch)
         neigh  (wiki/page-titles repo)
         tmp    (str (System/getProperty "java.io.tmpdir")
-                    "researcher-work-" (:number issue) "-" (System/currentTimeMillis))]
+                    "researcher-work-" (:number issue) "-" (System/currentTimeMillis))
+        prompt (str (issue-block issue)
+                    "\n\nEXISTING WIKI CARDS (link, don't duplicate): "
+                    (if (seq neigh) (str/join ", " neigh) "(none yet)")
+                    "\n\nResearch the concept, then write the card(s) via (put-concept! ...).")]
     (.mkdirs (java.io.File. (str tmp "/.omp")))
     (spit (str tmp "/.omp/mcp.json") (mcp-json cfg))
     (reset! task/current {:profile :worker :wiki-repo repo :branch branch :issue (:number issue)})
     (reset! task/trace [])
     (budget/reset-run!)
-    (try
-      (let [prompt (str (issue-block issue)
-                        "\n\nEXISTING WIKI PAGES (link, don't duplicate): "
-                        (if (seq neigh) (str/join ", " neigh) "(none yet)")
-                        "\n\nResearch the concept, then write ONE page with (put-concept! ...).")
-            {:keys [exit out err]}
-            (sh "omp" "-p" "--no-tools" "--no-session" "--no-title"
-                "--model" (get-in cfg [:omp :model])
-                "--cwd" tmp
-                "--system-prompt" system-prompt
-                "--" prompt)
-            _ (do (println "=== omp exit" exit "===") (println out)
-                  (when (seq err) (println "--- stderr ---\n" err)))
-            result (if (wiki/ahead? repo base branch)
-                     (do
-                       (wiki/push-branch! cfg repo branch)
-                       (let [pr (gh/create-pr! cfg {:title (str "wiki: " (:title issue))
-                                                    :head  branch :base base
-                                                    :body  (str "Closes #" (:number issue)
-                                                                "\n\nAuto-drafted by the researcher worker.")})]
-                         (when-let [item (:item-id issue)]
-                           (try (projects/set-status! cfg (get (projects/find-project cfg) "id") item "In Progress")
-                                (catch Throwable _ nil)))
-                         {:issue (:number issue) :branch branch :pr (get pr "html_url")}))
-                     {:issue (:number issue) :no-write true})]
-        (budget/report)
-        (try (gh/comment-issue! cfg (:number issue) (run-comment issue out result))
-             (catch Throwable e (println "comment post failed:" (.getMessage e))))
-        result)
-      (finally (reset! task/current nil)))))
+    (let [cid     (try (get (gh/comment-issue! cfg (:number issue)
+                                               (run-comment issue {:status :running})) "id")
+                       (catch Throwable _ nil))
+          running (atom true)
+          updater (when cid
+                    (future
+                      (while @running
+                        (Thread/sleep 6000)
+                        (try (gh/update-comment! cfg cid (run-comment issue {:status :running}))
+                             (catch Throwable _ nil)))))]
+      (try
+        (let [{:keys [exit out err]}
+              (sh "omp" "-p" "--no-tools" "--no-session" "--no-title"
+                  "--model" (get-in cfg [:omp :model]) "--cwd" tmp
+                  "--system-prompt" system-prompt "--" prompt)
+              _ (do (println "=== omp exit" exit "===") (println out)
+                    (when (seq err) (println "--- stderr ---\n" err)))
+              result (if (wiki/ahead? repo base branch)
+                       (try
+                         (wiki/push-branch! cfg repo branch)
+                         (let [pr (gh/create-pr! cfg {:title (str "wiki: " (:title issue))
+                                                      :head  branch :base base
+                                                      :body  (str "Closes #" (:number issue)
+                                                                  "\n\nAuto-drafted by the researcher worker.")})]
+                           (when-let [item (:item-id issue)]
+                             (try (projects/set-status! cfg (get (projects/find-project cfg) "id") item "In Progress")
+                                  (catch Throwable _ nil)))
+                           {:issue (:number issue) :branch branch :pr (get pr "html_url")})
+                         (catch Throwable e
+                           {:issue (:number issue) :branch branch :error (.getMessage e)}))
+                       {:issue (:number issue) :no-write true})]
+          (reset! running false)
+          (budget/report)
+          (when cid
+            (try (gh/update-comment! cfg cid (run-comment issue {:status :done :out out :result result}))
+                 (catch Throwable e (println "final comment failed:" (.getMessage e)))))
+          result)
+        (finally (reset! running false) (reset! task/current nil))))))

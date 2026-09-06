@@ -72,6 +72,18 @@
       body
       (throw (ex-info "github comment failed" {:status status :body body})))))
 
+(defn update-comment!
+  "Edit an existing issue comment — live-updates the worker's eval trace."
+  [cfg comment-id body]
+  (let [{:keys [status body]}
+        (http/json-request {:method :patch
+                            :url (str api "/repos/" (repo cfg) "/issues/comments/" comment-id)
+                            :headers (H cfg)
+                            :json {:body body}})]
+    (if (= 200 status)
+      body
+      (throw (ex-info "github update-comment failed" {:status status :body body})))))
+
 (defn close-issue!
   "Close an issue (used to discard a stale/denied task)."
   [cfg number]
