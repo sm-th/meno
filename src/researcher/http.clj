@@ -7,7 +7,7 @@
            (java.time Duration)))
 
 (defn json-request
-  "Perform an HTTP request. Opts: :method (:get/:post/:put), :url, :headers map,
+  "Perform an HTTP request. Opts: :method (:get/:post/:put/:patch/:delete), :url, :headers map,
    :json (clj data serialized as the request body).
    Returns {:status int :body parsed-json-or-raw-string}."
   [{:keys [method url headers json]}]
@@ -22,6 +22,7 @@
       :get  (.GET b)
       :post (.POST b pub)
       :put  (.PUT b pub)
+      :patch (.method b "PATCH" pub)
       :delete (.method b "DELETE" (HttpRequest$BodyPublishers/noBody)))
     (let [client (-> (HttpClient/newBuilder)
                      (.followRedirects java.net.http.HttpClient$Redirect/NORMAL)

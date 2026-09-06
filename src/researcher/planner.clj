@@ -25,15 +25,13 @@
        "   (propose-task!\n"
        "     {:op :create :type :concept\n"
        "      :title \"Research the principle of least privilege\"   ; verb-first imperative\n"
-       "      :rationale \"what the concept is + which note invoked it (brief), so the worker can "
-       "also add a connection card\"\n"
-       "      :acceptance [\"encyclopedic and objective; canonical definition and core distinctions\"\n"
-       "                   \"atomic: one idea per card\"\n"
-       "                   \">=2 sources the worker finds and cites\"\n"
-       "                   \"densely linked with [[wikilinks]] to related cards\"]\n"
+       "      :rationale \"the concept in a line + the note and the exact claim that invoked it\"\n"
        "      :seed_note \"<seed url>\"})\n\n"
-       "acceptance = outcome/quality criteria ONLY, never a content outline. Propose AT MOST ONE. "
-       "If {:refused ...}, stop. Act via eval; no prose answers."))
+       "The universal card contract — encyclopedic, objective, atomic, >=2 cited sources, densely "
+       "[[wikilinked]] — is the worker's STANDING rule, NOT per task. Do NOT restate it. Add "
+       ":acceptance ONLY for something specific to THIS concept (e.g. a common misconception to "
+       "avoid); otherwise omit it. Propose AT MOST ONE. If {:refused ...}, stop. Act via eval; no "
+       "prose answers."))
 
 (defn- mcp-json [cfg grant]
   (json/write-str

@@ -7,4 +7,7 @@
  {:run {:main-opts ["-m" "researcher.main"]}
   ;; The living image: HTTP eval door + embedded nREPL + stdin REPL, and it
   ;; spawns omp itself. ONE process for everything.
-  :mcp {:main-opts ["-m" "researcher.mcp"]}}}
+  :mcp {:main-opts ["-m" "researcher.mcp"]}
+  ;; Fast deterministic test suite (no network/omp) — the regression gate.
+  :test {:extra-paths ["test"]
+         :main-opts ["-m" "researcher.test-runner"]}}}

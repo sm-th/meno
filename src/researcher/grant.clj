@@ -21,7 +21,9 @@
 
 (defn- task-issue-body [task]
   (str (:rationale task) "\n\n"
-       "Acceptance:\n" (str/join "\n" (map #(str "- " %) (:acceptance task))) "\n\n"
+       (when (seq (:acceptance task))
+         (str "Acceptance (specific to this concept):\n"
+              (str/join "\n" (map #(str "- " %) (:acceptance task))) "\n\n"))
        "Seed: " (:seed_note task) "\n"
        "\n`op: " (name (or (:op task) :create)) " / type: " (name (or (:type task) :concept)) "`"))
 
