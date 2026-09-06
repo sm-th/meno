@@ -36,9 +36,9 @@
 (defn- mcp-json [cfg grant]
   (json/write-str
    {:mcpServers
-    {:door {:type "http"
-            :url (str "http://" (get-in cfg [:door :host] "127.0.0.1")
-                      ":" (get-in cfg [:door :port] 7777)
+    {:researcher {:type "http"
+            :url (str "http://" (get-in cfg [:gateway :host] "127.0.0.1")
+                      ":" (get-in cfg [:gateway :port] 7777)
                       "/mcp/" grant)}}}))
 
 (defn run [cfg]

@@ -36,3 +36,26 @@
     (if (#{200 201} status)
       body
       (throw (ex-info "github create-issue failed" {:status status :body body})))))
+
+(defn create-pr!
+  "Open a pull request. opts: :title :head (branch) :base :body."
+  [cfg {:keys [title head base body]}]
+  (let [{:keys [status body]}
+        (http/json-request {:method :post
+                            :url (str api "/repos/" (repo cfg) "/pulls")
+                            :headers (H cfg)
+                            :json {:title title :head head :base base :body body}})]
+    (if (#{200 201} status)
+      body
+      (throw (ex-info "github create-pr failed" {:status status :body body})))))
+
+(defn get-issue
+  "Fetch a single issue (for its body/rationale/acceptance)."
+  [cfg number]
+  (let [{:keys [status body]}
+        (http/json-request {:method :get
+                            :url (str api "/repos/" (repo cfg) "/issues/" number)
+                            :headers (H cfg)})]
+    (if (= 200 status)
+      body
+      (throw (ex-info "github get-issue failed" {:status status :body body})))))

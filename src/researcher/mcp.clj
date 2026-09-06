@@ -1,18 +1,20 @@
 (ns researcher.mcp
   "The living researcher image, ONE process:
-     - HTTP MCP door (single tool `eval`) at /mcp/{planner,worker}
+     - HTTP MCP gateway (single tool `eval`) at /mcp/{planner,worker}
      - an nREPL server (connect your editor to the SAME image)
      - a stdin REPL (drive it over the process stdin)
    The HTTP handler rebuilds the grant from live code+config on every request, so
    `(require ... :reload)` / config edits take effect immediately — no restart.
-   Secrets/state live here; omp sessions hold only the door."
+   Secrets/state live here; omp sessions hold only the gateway URL."
   (:require [clojure.data.json :as json]
             [clojure.main]
             [nrepl.server :as nrepl]
             [cider.nrepl :refer [cider-nrepl-handler]]
             [researcher.config :as config]
             [researcher.grant :as grant]
-            [researcher.planner :as planner])
+            [researcher.planner :as planner]
+            [researcher.worker :as worker]
+            [researcher.task :as task])
   (:import (com.sun.net.httpserver HttpServer HttpHandler HttpExchange)
            (java.net InetSocketAddress))
   (:gen-class))
@@ -31,7 +33,7 @@
     "initialize" {:jsonrpc "2.0" :id id
                   :result {:protocolVersion "2024-11-05"
                            :capabilities {:tools {}}
-                           :serverInfo {:name "researcher-door" :version "0.1"}}}
+                           :serverInfo {:name "researcher" :version "0.1"}}}
     "notifications/initialized" nil
     "ping" {:jsonrpc "2.0" :id id :result {}}
     "tools/list" {:jsonrpc "2.0" :id id :result {:tools [tool]}}
@@ -56,7 +58,10 @@
       (try
         (let [req  (json/read-str (slurp (.getRequestBody ex)))
               ;; live: rebuild grant from current config+code each request
-              ctx  (grant/build (config/load-config) {:profile profile})
+              world (if (= :worker profile)
+                      (merge {:profile :worker} @task/current)
+                      {:profile profile})
+              ctx  (grant/build (config/load-config) world)
               resp (handle-rpc ctx req)]
           (if resp
             (write-json! ex 200 resp)
@@ -68,22 +73,34 @@
 
 (defn plan!
   "Trigger one planner tick FROM the living image: the image spawns omp, which
-   calls back into this same image's eval door and files an issue."
+   calls back into this same image's eval gateway and files an issue."
   []
   (planner/run (config/load-config)))
 
+(defn work!
+  "Trigger one worker tick FROM the living image on an approved (Todo) issue.
+   number = issue number, or nil for the first in the queue. The image spawns
+   omp, which writes to the per-issue branch via this same gateway, then a PR opens."
+  ([] (work! nil))
+  ([number]
+   (let [cfg   (config/load-config)
+         issue (worker/pick cfg number)]
+     (if issue
+       (worker/run cfg issue)
+       (println "no approved (Todo) issue" (when number (str "#" number)))))))
+
 (defn -main [& _]
   (let [cfg   (config/load-config)
-        host  (get-in cfg [:door :host] "127.0.0.1")
-        port  (get-in cfg [:door :port] 7777)
-        nport (get-in cfg [:door :nrepl-port] 7778)
+        host  (get-in cfg [:gateway :host] "127.0.0.1")
+        port  (get-in cfg [:gateway :port] 7777)
+        nport (get-in cfg [:gateway :nrepl-port] 7778)
         srv   (HttpServer/create (InetSocketAddress. ^String host (int port)) 0)]
     (doseq [profile [:planner :worker]]
       (.createContext srv (str "/mcp/" (name profile)) (handler profile)))
     (.setExecutor srv nil)
     (.start srv)
     (nrepl/start-server :bind host :port nport :handler cider-nrepl-handler)
-    (println (str "researcher living image | door http://" host ":" port
+    (println (str "researcher living image | gateway http://" host ":" port
                   "/mcp/{planner,worker} | nrepl " host ":" nport))
     (flush)
     (clojure.main/repl :prompt #(do (print "image=> ") (flush)))))

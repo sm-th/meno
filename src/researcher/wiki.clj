@@ -3,6 +3,7 @@
    every put commits straight to that branch (bot identity, unsigned). Markdown
    is the source of truth; the graph connector reads it back."
   (:require [clojure.java.shell :refer [sh]]
+            [clojure.java.io :as io]
             [clojure.string :as str]))
 
 (defn slugify [title]
@@ -57,3 +58,49 @@
           "-c" "commit.gpgsign=false"
           "commit" "-m" (str "wiki: " (:title page)))
     {:slug slug :path rel :branch branch :title (:title page)}))
+
+(defn work-dir [cfg]
+  (or (get-in cfg [:wiki :work-dir])
+      (str (System/getProperty "user.home") "/.cache/researcher/wiki-work")))
+
+(defn- auth-header [cfg]
+  (str "http.extraheader=Authorization: Basic "
+       (.encodeToString (java.util.Base64/getEncoder)
+                        (.getBytes (str "x-access-token:"
+                                        (System/getenv (get-in cfg [:wiki :token-env] "GH_TOKEN")))))))
+
+(defn prepare-branch!
+  "Ensure a managed work clone of the (public) wiki exists, fetch base, and
+   checkout -B branch from origin/base. Returns the clone path. Read is
+   token-less (public repo); push carries the token in an http header, not on
+   disk (see push-branch!)."
+  [cfg branch]
+  (let [work   (work-dir cfg)
+        base   (get-in cfg [:wiki :base] "main")
+        remote (str "https://github.com/" (get-in cfg [:github :repo]) ".git")]
+    (when-not (.exists (io/file work ".git"))
+      (io/make-parents (io/file work ".git"))
+      (let [r (sh "git" "clone" remote work)]
+        (when-not (zero? (:exit r)) (throw (ex-info "wiki clone failed" {:err (:err r)})))))
+    (git! work "remote" "set-url" "origin" remote)
+    (git! work "fetch" "origin" base)
+    (git! work "checkout" "-B" branch (str "origin/" base))
+    work))
+
+(defn ahead?
+  "True if branch has commits beyond origin/base (i.e. the worker wrote pages)."
+  [repo base branch]
+  (let [r (sh "git" "-C" repo "rev-list" "--count" (str "origin/" base ".." branch))]
+    (pos? (Integer/parseInt (str/trim (:out r))))))
+
+(defn push-branch! [cfg repo branch]
+  (git! repo "-c" (auth-header cfg) "push" "-u" "origin" branch))
+
+(defn page-titles
+  "Slugs of existing wiki pages under content/ (dedup context for the worker)."
+  [repo]
+  (let [dir (io/file repo "content")]
+    (when (.isDirectory dir)
+      (->> (.listFiles dir)
+           (filter #(str/ends-with? (.getName %) ".md"))
+           (mapv #(str/replace (.getName %) #"\.md$" ""))))))
