@@ -99,6 +99,14 @@
                   :labels (get gi "labels")
                   :role   (role-of {:labels (get gi "labels")}))))))
 
+(defn- fenced-md
+  "Wrap text in a ```md fence long enough to survive any backtick run inside it,
+   so the embedded note never bleeds into the surrounding task instructions."
+  [s]
+  (let [longest (->> (re-seq #"`+" (str s)) (map count) (reduce max 0))
+        fence   (apply str (repeat (max 3 (inc longest)) \`))]
+    (str fence "md\n" s "\n" fence)))
+
 (defn file-ingest-task!
   "Per new article (call when a post is published): deterministically — no LLM —
    file ONE `role:ingest` task into Backlog for triage. `run!` later runs the
@@ -111,9 +119,10 @@
          rel  (first (git/commit-post-files blog sha))
          n    (note/load-note blog rel)
          url  (str (get-in cfg [:blog :url]) (:url n))
-         body (str "A new note by Andy was published. Read it below and ingest it: judge "
-                   "whether it carries established concepts worth cards; if so, file a plan task.\n\n"
-                   "**Note:** [" (:title n) "](" url ")\n\n---\n\n" (:body n))
+         body (str "A new note by Andy was published. Read it (the fenced block below) and "
+                   "ingest it: judge whether it carries established concepts worth cards; if so, "
+                   "file a plan task.\n\n"
+                   "**Note:** [" (:title n) "](" url ")\n\n" (fenced-md (:body n)))
          issue (gh/create-issue cfg {:title  (str "Ingest: " (:title n))
                                      :body   body
                                      :labels ["role:ingest"]})]
