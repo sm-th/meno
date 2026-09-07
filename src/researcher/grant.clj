@@ -42,7 +42,7 @@
          "`op: " (name (or (:op task) :create))
          " · type: " (name (or (:type task) :concept)) "`")))
 
-(defn- propose-task-fn [cfg]
+(defn- propose-task-fn [cfg child]
   (fn [task]
     (let [rationale (str/trim (str (or (:rationale task) (:why task))))
           goals (->> (:goals task) (map #(str/trim (str %))) (remove str/blank?))
@@ -60,53 +60,54 @@
         :else
         (let [issue (gh/create-issue cfg {:title (:title task)
                                           :body (task-issue-body cfg task)
-                                          :labels [(str "type:" (name (or (:type task) :concept)))]})]
+                                          :labels [(str "type:" (name (or (:type task) :concept)))
+                                                   (str "role:" (name (or (:role task) child)))]})]
           (when-let [p (projects/find-project cfg)]
             (projects/add-to-backlog! cfg (get p "id") (get issue "node_id")))
           {:filed (get issue "number") :title (:title task)})))))
 
 (defn build
-  "Build the SCI grant context. world:
-     :profile   :planner | :worker (default :worker)
-     :wiki-repo :branch  enable writes (worker)
-     :dry?      true -> propose-task! is a no-op (bench: never touch GitHub)."
-  [cfg {:keys [profile wiki-repo branch dry?] :or {profile :worker}}]
-  (let [w (when (and wiki-repo branch) (wiki/writer cfg wiki-repo branch))
-        read-fns
-        {'recall  (fn ([q] (mapv hit->clj (index/recall cfg q 8)))
-                    ([q k] (mapv hit->clj (index/recall cfg q k))))
-         'fetch   (fn [url] (reader/readable url))
-         'search  (fn [q] (search/web cfg q))
-         'central (fn [n] (graph/central (graph/load-graph cfg) n))
-         'reference-frequency (fn [] (graph/reference-frequency (graph/load-graph cfg)))
-         'context (fn [] {:model (get-in cfg [:omp :model]) :profile profile :branch branch})
-         'open-tasks (fn [] (mapv (fn [i] {:number (get i "number") :title (get i "title")})
-                                  (gh/open-issues cfg)))}
-        plan-fns  {'propose-task! (if dry?
-                                    (fn [task] {:filed :dry :title (:title task)})
-                                    (propose-task-fn cfg))
-                   'enrich-task! (if dry?
-                                   (fn [n _] {:enriched :dry :number n})
-                                   (fn [n add]
-                                     (let [cur  (str (get (gh/get-issue cfg n) "body"))
-                                           note (str/trim (str add))]
-                                       (gh/update-issue! cfg n {:body (str cur "\n\n---\n*Researcher note:* " note)})
-                                       {:enriched n})))}
-        write-fns (when w
-                    {'put-concept!
-                     (fn [page]
-                       (let [slug (wiki/slugify (:title page))
-                             f    (java.io.File. (str wiki-repo "/" (wiki/card-rel :concept slug)))]
-                         (if (.exists f)
-                           {:skipped slug :reason "canonical concept card already exists — not rewritten"}
-                           (wiki/put-page! w (assoc page :type :concept)))))
-                     'put-connection!
-                     (fn [page] (wiki/put-page! w (assoc page :type :connection)))
-                     'put-reference!
-                     (fn [page] (wiki/put-page! w (assoc page :type :reference)))})
-        ns-map (case profile
-                 :planner (merge read-fns plan-fns)
-                 (merge read-fns plan-fns write-fns))]
+  "Build the SCI grant for a ROLE. world:
+     :role      keyword/string — selects tools (cfg :roles) and labels context
+     :wiki-repo :branch  enable write fns (branch-scoped)
+     :creates   default role of tasks filed via propose-task! (else role's :creates)
+     :dry?      true -> propose-task!/enrich-task! are no-ops (bench)."
+  [cfg {:keys [role wiki-repo branch dry? creates] :or {role :research}}]
+  (let [role  (keyword role)
+        w     (when (and wiki-repo branch) (wiki/writer cfg wiki-repo branch))
+        child (or creates (get-in cfg [:roles role :creates]) "research")
+        registry
+        {"recall"  (fn ([q] (mapv hit->clj (index/recall cfg q 8)))
+                     ([q k] (mapv hit->clj (index/recall cfg q k))))
+         "fetch"   (fn [url] (reader/readable url))
+         "search"  (fn [q] (search/web cfg q))
+         "central" (fn [n] (graph/central (graph/load-graph cfg) n))
+         "reference-frequency" (fn [] (graph/reference-frequency (graph/load-graph cfg)))
+         "open-tasks" (fn [] (mapv (fn [i] {:number (get i "number") :title (get i "title")})
+                                   (gh/open-issues cfg)))
+         "propose-task!" (if dry?
+                           (fn [task] {:filed :dry :title (:title task)})
+                           (propose-task-fn cfg child))
+         "enrich-task!" (if dry?
+                          (fn [n _] {:enriched :dry :number n})
+                          (fn [n add]
+                            (let [cur  (str (get (gh/get-issue cfg n) "body"))
+                                  note (str/trim (str add))]
+                              (gh/update-issue! cfg n {:body (str cur "\n\n---\n*Researcher note:* " note)})
+                              {:enriched n})))
+         "put-concept!" (when w
+                          (fn [page]
+                            (let [slug (wiki/slugify (:title page))
+                                  f    (java.io.File. (str wiki-repo "/" (wiki/card-rel :concept slug)))]
+                              (if (.exists f)
+                                {:skipped slug :reason "canonical concept card already exists — not rewritten"}
+                                (wiki/put-page! w (assoc page :type :concept))))))
+         "put-connection!" (when w (fn [page] (wiki/put-page! w (assoc page :type :connection))))
+         "put-reference!"  (when w (fn [page] (wiki/put-page! w (assoc page :type :reference))))}
+        wanted (get-in cfg [:roles role :tools])
+        chosen (if (seq wanted) wanted (keys registry))
+        ns-map (into {'context (fn [] {:model (get-in cfg [:omp :model]) :role (name role) :branch branch})}
+                     (for [t chosen :let [f (get registry t)] :when f] [(symbol t) f]))]
     (sci/init {:namespaces {'user ns-map}})))
 
 (defn eval-ctx [ctx code] (sci/eval-string* ctx code))

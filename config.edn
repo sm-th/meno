@@ -50,6 +50,21 @@
  ;; living image so the /mcp/worker endpoint is branch-scoped via researcher.task.
  :worker {:branch-prefix "researcher/issue-"}
 
+ ;; Roles = data. Each issue is tagged `role:<name>`; the runner loads that role's
+ ;; system prompt from the wiki (content/<meta>.md) and grants exactly its tools.
+ ;; Add a role = a meta card + an entry here, no code. :writes? -> per-issue wiki
+ ;; branch + PR. :creates -> default role of tasks this role files (propose-task!).
+ :roles
+ {:ingest   {:meta "meta/ingest"   :writes? false :creates "plan"
+             :tools ["recall" "central" "open-tasks" "propose-task!"]}
+  :plan     {:meta "meta/plan"     :writes? false :creates "research"
+             :tools ["recall" "search" "fetch" "central" "reference-frequency"
+                     "open-tasks" "enrich-task!" "propose-task!"]}
+  :research {:meta "meta/research" :writes? true  :creates "research"
+             :tools ["recall" "search" "fetch" "central" "reference-frequency"
+                     "open-tasks" "put-concept!" "put-connection!" "put-reference!"
+                     "propose-task!"]}}
+
  ;; GitHub issues = the task queue (planner files, you triage, worker executes).
  :github {:repo "agent-smith-wiki/smith-wiki" :token-env "GH_TOKEN"}
 

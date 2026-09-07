@@ -1,7 +1,6 @@
 (ns researcher.main
   (:require [researcher.config :as config]
-            [researcher.planner :as planner]
-            [researcher.worker :as worker]
+            [researcher.runner :as runner]
             [researcher.sandbox :as sandbox]
             [researcher.index :as index]
             [researcher.refs :as refs]
@@ -13,8 +12,9 @@
   (let [cmd (or (first args) "plan")
         cfg (config/load-config)]
     (case cmd
-      "plan"   (planner/run cfg)
-      "work"   (worker/dry-run cfg (second args))
+      "plan"   (runner/run-issue cfg (runner/seed-issue cfg :plan))
+      "work"   (let [i (runner/pick cfg (second args))]
+                 (if i (runner/run-issue cfg i) (println "no approved (Todo) issue")))
       "launch" (sandbox/print-launch cfg (keyword (or (second args) "worker")) ["work" "N"])
       "index"  (do (budget/reset-run!)
                    (println "indexed" (index/build! cfg) "docs into Qdrant")

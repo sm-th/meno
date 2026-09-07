@@ -1,19 +1,18 @@
 (ns researcher.mcp
   "The living researcher image, ONE process:
-     - HTTP MCP gateway (single tool `eval`) at /mcp/{planner,worker}
+     - HTTP MCP gateway (single tool `eval`) at /mcp/<role> for every configured role
      - an nREPL server (connect your editor to the SAME image)
      - a stdin REPL (drive it over the process stdin)
    The HTTP handler rebuilds the grant from live code+config on every request, so
    `(require ... :reload)` / config edits take effect immediately — no restart.
    Secrets/state live here; omp sessions hold only the gateway URL."
   (:require [clojure.data.json :as json]
-            [clojure.main]
+            [clojure.string :as str]
             [nrepl.server :as nrepl]
             [cider.nrepl :refer [cider-nrepl-handler]]
             [researcher.config :as config]
             [researcher.grant :as grant]
-            [researcher.planner :as planner]
-            [researcher.worker :as worker]
+            [researcher.runner :as runner]
             [researcher.task :as task])
   (:import (com.sun.net.httpserver HttpServer HttpHandler HttpExchange)
            (java.net InetSocketAddress))
@@ -59,17 +58,16 @@
     (.sendResponseHeaders ex status (alength bytes))
     (doto (.getResponseBody ex) (.write bytes) (.close))))
 
-(defn- handler [profile]
+(defn- handler [role]
   (proxy [HttpHandler] []
     (handle [^HttpExchange ex]
       (try
         (let [req  (json/read-str (slurp (.getRequestBody ex)))
-              ;; live: rebuild grant from current config+code each request
-              world (if (= :worker profile)
-                      (merge {:profile :worker} @task/current)
-                      {:profile profile})
-              ctx  (grant/build (config/load-config) world)
-              resp (handle-rpc ctx req)]
+              ;; live: rebuild the grant from current config+code each request.
+              ;; task/current carries the running issue's branch (writes roles).
+              world (assoc (or @task/current {}) :role role)
+              ctx   (grant/build (config/load-config) world)
+              resp  (handle-rpc ctx req)]
           (if resp
             (write-json! ex 200 resp)
             (do (.sendResponseHeaders ex 202 -1) (.close (.getResponseBody ex)))))
@@ -79,35 +77,43 @@
       nil)))
 
 (defn plan!
-  "Trigger one planner tick FROM the living image: the image spawns omp, which
-   calls back into this same image's eval gateway and files an issue."
+  "Top-of-pipeline: run the PLAN role on the newest published note (files research
+   tasks into Backlog via propose-task!)."
   []
-  (planner/run (config/load-config)))
+  (runner/run-issue (config/load-config) (runner/seed-issue (config/load-config) :plan)))
+
+(defn ingest!
+  "Top-of-pipeline: run the INGEST role on the newest published note."
+  []
+  (runner/run-issue (config/load-config) (runner/seed-issue (config/load-config) :ingest)))
 
 (defn work!
-  "Trigger one worker tick FROM the living image on an approved (Todo) issue.
-   number = issue number, or nil for the first in the queue. The image spawns
-   omp, which writes to the per-issue branch via this same gateway, then a PR opens."
+  "Run one approved (Todo) issue by number, or the first in the queue, under its
+   own `role:<name>` tag. Writes roles open a PR."
   ([] (work! nil))
   ([number]
    (let [cfg   (config/load-config)
-         issue (worker/pick cfg number)]
+         issue (runner/pick cfg number)]
      (if issue
-       (worker/run cfg issue)
+       (runner/run-issue cfg issue)
        (println "no approved (Todo) issue" (when number (str "#" number)))))))
+
+;; tick! = alias for work!: pull the next approved issue of any role.
+(def tick! work!)
 
 (defn -main [& _]
   (let [cfg   (config/load-config)
         host  (get-in cfg [:gateway :host] "127.0.0.1")
         port  (get-in cfg [:gateway :port] 7777)
         nport (get-in cfg [:gateway :nrepl-port] 7778)
+        roles (keys (:roles cfg))
         srv   (HttpServer/create (InetSocketAddress. ^String host (int port)) 0)]
-    (doseq [profile [:planner :worker]]
-      (.createContext srv (str "/mcp/" (name profile)) (handler profile)))
+    (doseq [role roles]
+      (.createContext srv (str "/mcp/" (name role)) (handler role)))
     (.setExecutor srv (java.util.concurrent.Executors/newFixedThreadPool 4))
     (.start srv)
     (nrepl/start-server :bind host :port nport :handler cider-nrepl-handler)
     (println (str "researcher living image | gateway http://" host ":" port
-                  "/mcp/{planner,worker} | nrepl " host ":" nport))
+                  "/mcp/{" (str/join "," (map name roles)) "} | nrepl " host ":" nport))
     (flush)
     (clojure.main/repl :prompt #(do (print "image=> ") (flush)))))
