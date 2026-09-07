@@ -12,7 +12,8 @@
             [researcher.graph :as graph]
             [researcher.github :as gh]
             [researcher.projects :as projects]
-            [researcher.wiki :as wiki]))
+            [researcher.wiki :as wiki]
+            [researcher.prompt :as prompt]))
 
 (defn- hit->clj [h]
   (let [p (get h "payload")]
@@ -25,20 +26,22 @@
        "/content/" (get-in cfg [:wiki :conventions] "conventions") ".md"))
 
 (defn- task-issue-body [cfg task]
-  ;; The universal card contract lives once in the wiki Conventions card (linked
-  ;; in the footer), not restated per task. A task carries, for human triage:
-  ;; why the concept matters (with the note's own words quoted inline, right where
-  ;; the point is made) and the concrete research goals that scope it.
+  ;; A task issue is a self-contained spec — for human triage AND the agent: why
+  ;; it matters (with the note's words quoted inline) and a Definition of Done: the
+  ;; concrete, checkable criteria (the :goals). The HOW lives in the role's skill;
+  ;; the standing card contract lives in the Conventions card (linked in References).
   (let [rationale (str/trim (str (or (:rationale task) (:why task))))
         goals     (->> (:goals task) (map #(str/trim (str %))) (remove str/blank?))
-        seed      (str/trim (str (:seed_note task)))]
+        seed      (str/trim (str (:seed_note task)))
+        role      (keyword (or (:role task) :research))]
     (str "## Why this matters\n\n" rationale "\n"
          (when (seq goals)
-           (str "\n## Research goals\n\n"
+           (str "\n## Definition of Done\n\n"
                 (str/join "\n" (map #(str "- [ ] " %) goals)) "\n"))
-         "\n---\n\n"
-         (when (seq seed) (str "**Seed:** " seed "  \n"))
-         "**Conventions:** " (conventions-url cfg) "\n\n"
+         "\n## References\n\n"
+         (when (seq seed) (str "- Seed: " seed "\n"))
+         (prompt/skill-ref cfg role) "\n"
+         "- Conventions: " (conventions-url cfg) "\n\n"
          "`op: " (name (or (:op task) :create))
          " · type: " (name (or (:type task) :concept)) "`")))
 
@@ -58,10 +61,11 @@
         (>= open cap)
         {:refused (str "queue full: " open "/" cap " open issues — triage first")}
         :else
-        (let [issue (gh/create-issue cfg {:title (:title task)
-                                          :body (task-issue-body cfg task)
+        (let [role  (keyword (or (:role task) child))
+              issue (gh/create-issue cfg {:title (:title task)
+                                          :body (task-issue-body cfg (assoc task :role role))
                                           :labels [(str "type:" (name (or (:type task) :concept)))
-                                                   (str "role:" (name (or (:role task) child)))]})]
+                                                   (str "role:" (name role))]})]
           (when-let [p (projects/find-project cfg)]
             (projects/add-to-backlog! cfg (get p "id") (get issue "node_id")))
           {:filed (get issue "number") :title (:title task)})))))

@@ -17,16 +17,16 @@
     (is (not (str/includes? s "Acceptance")))
     (is (not (str/includes? s "encyclopedic")))
     (is (str/includes? s "## Why this matters"))
-    (is (str/includes? s "**Conventions:**"))
+    (is (str/includes? s "- Conventions:"))
     (is (str/includes? s "/blob/main/content/conventions.md"))
     (is (str/includes? s "R"))
-    (is (str/includes? s "**Seed:** u"))
+    (is (str/includes? s "- Seed: u"))
     (is (str/includes? s "type: concept"))))
 
 (deftest task-body-minimal
   (let [s (body cfg {:rationale "Least privilege is invoked by the note" :seed_note "u"})]
     (is (str/includes? s "Least privilege is invoked by the note"))
-    (is (str/includes? s "**Seed:** u"))))
+    (is (str/includes? s "- Seed: u"))))
 (deftest task-body-renders-goals-and-inline-quote
   ;; Quotes are woven inline in the rationale (no separate block); research goals
   ;; render as a checklist. :why is accepted as an alias for :rationale.
@@ -34,7 +34,7 @@
                      :goals ["the canonical, vendor-neutral definition" "how it applies to agents"]
                      :seed_note "u" :type :concept})]
     (is (str/includes? s "run in a sandbox"))
-    (is (str/includes? s "## Research goals"))
+    (is (str/includes? s "## Definition of Done"))
     (is (str/includes? s "- [ ] the canonical, vendor-neutral definition"))
     (is (not (str/includes? s "## From the note")))
-    (is (str/includes? s "**Seed:** u"))))
+    (is (str/includes? s "- Seed: u"))))

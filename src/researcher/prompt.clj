@@ -18,3 +18,25 @@
        "A SKILL for your task follows. It tells you precisely what to do and which of "
        "the granted tools to use; follow it exactly. Act only via eval — never answer "
        "in prose."))
+
+;; A one-line gloss per role so a task issue is self-explanatory to a human reader
+;; who does not open the skill.
+(def skill-gloss
+  {"ingest"   "triage the note; if it is worthwhile, file a plan task"
+   "plan"     "break the note into one research task per canonical concept"
+   "research" "write the concept card (cited, wikilinked) and open a PR"})
+
+(defn skill-url
+  "Link to a role's skill page in the wiki (content/meta/skill/<role>.md)."
+  [cfg role]
+  (str "https://github.com/" (get-in cfg [:github :repo])
+       "/blob/" (get-in cfg [:wiki :base] "main")
+       "/content/meta/skill/" (name role) ".md"))
+
+(defn skill-ref
+  "A References-list line naming the skill that will handle this task, so an
+   outside observer sees what will happen — link + one-line gloss."
+  [cfg role]
+  (let [r (name role)]
+    (str "- Skill: [" r "](" (skill-url cfg role) ")"
+         (when-let [g (skill-gloss r)] (str " — " g)))))

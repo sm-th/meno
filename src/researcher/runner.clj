@@ -107,6 +107,20 @@
         fence   (apply str (repeat (max 3 (inc longest)) \`))]
     (str fence "md\n" s "\n" fence)))
 
+(defn- ingest-body [cfg n url]
+  (str "## Objective\n\n"
+       "Triage this newly published note; if it carries established concepts worth "
+       "encyclopedic cards, file ONE plan task.\n\n"
+       "## Definition of Done\n\n"
+       "- [ ] Note read and judged: real established concepts vs a pure status update / link dump\n"
+       "- [ ] If worth planning: exactly one `role:plan` \"Plan concepts from …\" task filed (no duplicate)\n"
+       "- [ ] If not worth planning: nothing filed\n\n"
+       "## References\n\n"
+       (prompt/skill-ref cfg :ingest) "\n"
+       "- Seed: " url "\n\n"
+       "## Note\n\n"
+       "**[" (:title n) "](" url ")**\n\n" (fenced-md (:body n))))
+
 (defn file-ingest-task!
   "Per new article (call when a post is published): deterministically — no LLM —
    file ONE `role:ingest` task into Backlog for triage. `run!` later runs the
@@ -119,10 +133,7 @@
          rel  (first (git/commit-post-files blog sha))
          n    (note/load-note blog rel)
          url  (str (get-in cfg [:blog :url]) (:url n))
-         body (str "A new note by Andy was published. Read it (the fenced block below) and "
-                   "ingest it: judge whether it carries established concepts worth cards; if so, "
-                   "file a plan task.\n\n"
-                   "**Note:** [" (:title n) "](" url ")\n\n" (fenced-md (:body n)))
+         body (ingest-body cfg n url)
          issue (gh/create-issue cfg {:title  (str "Ingest: " (:title n))
                                      :body   body
                                      :labels ["role:ingest"]})]
