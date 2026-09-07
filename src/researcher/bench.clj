@@ -83,7 +83,10 @@
 
 (defn- report-md [judge probes usage judged]
   (let [models    (sort (keys usage))
-        model-avg (fn [m] (avg (map #(get-in % [:scores m]) judged)))]
+        types     (distinct (map :type probes))
+        model-avg (fn [m] (avg (map #(get-in % [:scores m]) judged)))
+        mt-avg    (fn [m t] (avg (map #(get-in % [:scores m])
+                                      (filter #(= t (:type %)) judged))))]
     (str "# Model bench (request-level, comparative) — " (java.time.Instant/now) "\n\n"
          "Judge: `" judge "`  ·  probes: " (count probes) "  ·  models: " (count models) "\n"
          "Bare `omp -p --no-tools` completions; per-probe comparative scoring; "
@@ -94,6 +97,13 @@
                      (str "| `" m "` | " (format "%.2f" (double (model-avg m)))
                           " | " (get-in usage [m :delta]) " (" (get-in usage [m :provider]) ")"
                           " | " (count (filter #(= m (:best %)) judged)) "/" (count judged) " |")))
+         "\n\n## By request type (avg /10 — choose a model per class)\n\n"
+         "| model | " (str/join " | " (map name types)) " |\n|---|"
+         (str/join "" (repeat (count types) "---|")) "\n"
+         (str/join "\n"
+                   (for [m (sort-by (comp - model-avg) models)]
+                     (str "| `" m "` | "
+                          (str/join " | " (for [t types] (format "%.1f" (double (mt-avg m t))))) " |")))
          "\n\n## Per probe (score /10, ★ = judged best)\n\n"
          "| probe | type | " (str/join " | " models) " |\n|---|---|"
          (str/join "" (repeat (count models) "---|")) "\n"
