@@ -32,11 +32,11 @@
           :api-key-env "TAVILY_API_KEY"
           :max-results 5}
 
- ;; All LLM reasoning goes through omp (Claude). Model: Sonnet (inexpensive) —
- ;; watch quality AND cost closely on first runs. Auth via secretspec env
- ;; ANTHROPIC_OAUTH_TOKEN (claude setup-token).
- :omp {:model "claude-sonnet-4-5"   ; verify exact catalog id when wiring omp
-       :oauth-token-env "ANTHROPIC_OAUTH_TOKEN"}
+ ;; All LLM reasoning goes through omp. Model chosen by bench/REPORT.md:
+ ;; deepseek-v4-flash via OpenCode Go (top quality/cost on our request types;
+ ;; key in ~/.omp/agent/.env OPENCODE_API_KEY). Bump to deepseek-v4-pro only if
+ ;; card synthesis looks weak in real PRs.
+ :omp {:model "opencode-go/deepseek-v4-flash"}
 
  ;; Human-review policy: keep the queue tiny. File at most :max-new-per-run new
  ;; issues per run, and stay silent once :wip-cap open issues exist.

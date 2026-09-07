@@ -72,11 +72,12 @@
   (or (get-in cfg [:wiki :work-dir])
       (str (System/getProperty "user.home") "/.cache/researcher/wiki-work")))
 
-(defn- auth-header [cfg]
-  (str "http.extraheader=Authorization: Basic "
-       (.encodeToString (java.util.Base64/getEncoder)
-                        (.getBytes (str "x-access-token:"
-                                        (System/getenv (get-in cfg [:wiki :token-env] "GH_TOKEN")))))))
+(defn- ssh-cmd [cfg]
+  ;; Wiki pushes use the human's write access (id_alchery) over SSH — the bot PAT
+  ;; lacks Contents:write. In prod, grant the bot Contents:write and switch back.
+  (str "ssh -i " (or (get-in cfg [:wiki :ssh-key])
+                     (str (System/getProperty "user.home") "/.ssh/id_alchery"))
+       " -o IdentitiesOnly=yes -o StrictHostKeyChecking=no"))
 
 (defn prepare-branch!
   "Ensure a managed work clone of the (public) wiki exists, fetch base, and
@@ -103,7 +104,9 @@
     (pos? (Integer/parseInt (str/trim (:out r))))))
 
 (defn push-branch! [cfg repo branch]
-  (git! repo "-c" (auth-header cfg) "push" "-u" "origin" branch))
+  (git! repo "-c" (str "core.sshCommand=" (ssh-cmd cfg))
+        "push" (str "git@github.com:" (get-in cfg [:github :repo]) ".git")
+        (str branch ":" branch)))
 
 (defn page-titles
   "Slugs of existing wiki cards (recursively under content/) — dedup context."

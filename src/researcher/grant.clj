@@ -55,7 +55,8 @@
   [cfg {:keys [profile wiki-repo branch dry?] :or {profile :worker}}]
   (let [w (when (and wiki-repo branch) (wiki/writer cfg wiki-repo branch))
         read-fns
-        {'recall  (fn [q k] (mapv hit->clj (index/recall cfg q k)))
+        {'recall  (fn ([q] (mapv hit->clj (index/recall cfg q 8)))
+                    ([q k] (mapv hit->clj (index/recall cfg q k))))
          'fetch   (fn [url] (reader/readable url))
          'search  (fn [q] (search/web cfg q))
          'central (fn [n] (graph/central (graph/load-graph cfg) n))
