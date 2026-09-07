@@ -94,6 +94,38 @@
        (runner/run-issue cfg issue)
        (println "no approved (Todo) issue" (when number (str "#" number)))))))
 
+(def ^:private orchestrator (atom nil))
+(def ^:private active (atom #{}))       ; issue numbers currently running
+
+(defn start-loop!
+  "Background orchestrator: poll the board and run approved (Todo) issues, up to
+   `:orchestrator :wip` at a time (default 1), until stopped. Filing/approving
+   stays manual; this drains whatever you move to Todo.
+   NOTE: run context (branch) and the eval trace are process-global today, so only
+   wip=1 is safe; wip>1 needs per-run isolation of task/current + task/trace."
+  []
+  (when-not @orchestrator
+    (reset! orchestrator true)
+    (future
+      (println "orchestrator: draining Todo")
+      (while @orchestrator
+        (let [cfg (config/load-config)
+              wip (get-in cfg [:orchestrator :wip] 1)]
+          (loop []
+            (when (and @orchestrator (< (count @active) wip))
+              (when-let [issue (try (runner/next-todo cfg @active) (catch Throwable _ nil))]
+                (swap! active conj (:number issue))
+                (println "orchestrator: running #" (:number issue) "(" (name (runner/role-of issue)) ")")
+                (future
+                  (try (runner/run-issue cfg issue)
+                       (catch Throwable t (println "orchestrator error #" (:number issue) ":" (.getMessage t)))
+                       (finally (swap! active disj (:number issue)))))
+                (recur))))
+          (Thread/sleep (get-in cfg [:orchestrator :poll-ms] 15000)))))
+    :started))
+
+(defn stop-loop! [] (reset! orchestrator nil) :stopped)
+
 (defn -main [& _]
   (let [cfg   (config/load-config)
         host  (get-in cfg [:gateway :host] "127.0.0.1")
@@ -108,5 +140,6 @@
     (nrepl/start-server :bind host :port nport :handler cider-nrepl-handler)
     (println (str "researcher living image | gateway http://" host ":" port
                   "/mcp/{" (str/join "," (map name roles)) "} | nrepl " host ":" nport))
+    (start-loop!)
     (flush)
     (clojure.main/repl :prompt #(do (print "image=> ") (flush)))))

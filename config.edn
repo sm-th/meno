@@ -68,6 +68,10 @@
  ;; GitHub issues = the task queue (planner files, you triage, worker executes).
  :github {:repo "agent-smith-wiki/smith-wiki" :token-env "GH_TOKEN"}
 
+ ;; Orchestrator: the living image polls the board and runs the next approved
+ ;; (Todo) issue on its own, one at a time. Filing/approving stays manual.
+ :orchestrator {:poll-ms 15000 :wip 1}   ; wip = tasks in flight at once (1 for now)
+
  ;; GitHub Projects v2 = the approval BOARD. Separate CLASSIC token (`project`
  ;; scope) via GraphQL — fine-grained PATs can't grant user-owned Projects. See
  ;; docs/auth.md. :number is filled once the project is created.

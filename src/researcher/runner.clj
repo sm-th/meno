@@ -99,6 +99,19 @@
                   :labels (get gi "labels")
                   :role   (role-of {:labels (get gi "labels")}))))))
 
+(defn next-todo
+  "First approved (Todo) issue whose number is NOT in `exclude`, enriched with body,
+   labels, and role. Lets the orchestrator launch several without re-picking one
+   that is already running. nil if none."
+  [cfg exclude]
+  (let [pid (get (projects/find-project cfg) "id")
+        it  (first (remove #(contains? (set exclude) (:number %)) (projects/todo-items cfg pid)))]
+    (when it
+      (let [gi (gh/get-issue cfg (:number it))]
+        (assoc it :body   (get gi "body")
+                  :labels (get gi "labels")
+                  :role   (role-of {:labels (get gi "labels")}))))))
+
 (defn- fenced-md
   "Wrap text in a ```md fence long enough to survive any backtick run inside it,
    so the embedded note never bleeds into the surrounding task instructions."
