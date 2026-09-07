@@ -63,8 +63,10 @@
             :token-env "GH_PROJECTS_TOKEN"
             :graphql "https://api.github.com/graphql"
             :statuses ["Backlog" "Todo" "In Progress" "In Review" "Done" "Denied"]
-            :approved-status "Todo"
-            :backlog-status "Backlog"}
+            :approved-status "Todo"           ; you drag a card here -> worker picks it up
+            :in-progress-status "In Progress" ; worker sets this the moment it takes the issue
+            :review-status "In Review"        ; worker sets this once the PR is open (add this column in the board UI)
+            :backlog-status nil}              ; Backlog = No Status (planner clears; not a named option)
 
  ;; The long-lived MCP gateway: HTTP server (one eval tool) into the shared image.
  :gateway {:host "127.0.0.1" :port 7777 :nrepl-port 7778}

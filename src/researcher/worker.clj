@@ -124,6 +124,10 @@
     (reset! task/current {:profile :worker :wiki-repo repo :branch branch :issue (:number issue)})
     (reset! task/trace [])
     (budget/reset-run!)
+      (when-let [item (:item-id issue)]
+        (try (projects/set-status! cfg (get (projects/find-project cfg) "id") item
+                                   (get-in cfg [:projects :in-progress-status] "In Progress"))
+             (catch Throwable _ nil)))
     (let [cid     (try (get (gh/comment-issue! cfg (:number issue)
                                                (run-comment issue {:status :running})) "id")
                        (catch Throwable _ nil))
@@ -149,7 +153,8 @@
                                                       :body  (str "Closes #" (:number issue)
                                                                   "\n\nAuto-drafted by the researcher worker.")})]
                            (when-let [item (:item-id issue)]
-                             (try (projects/set-status! cfg (get (projects/find-project cfg) "id") item "In Progress")
+                             (try (projects/set-status! cfg (get (projects/find-project cfg) "id") item
+                                                        (get-in cfg [:projects :review-status] "In Review"))
                                   (catch Throwable _ nil)))
                            {:issue (:number issue) :branch branch :pr (get pr "html_url")})
                          (catch Throwable e

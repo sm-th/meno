@@ -25,19 +25,21 @@
        "/content/" (get-in cfg [:wiki :conventions] "conventions") ".md"))
 
 (defn- task-issue-body [cfg task]
-  ;; The card contract lives once as the wiki Conventions card (linked below),
-  ;; not restated per task; acceptance is intentionally not rendered. What a task
-  ;; MUST carry for human triage: why the concept matters + a verbatim quote from
-  ;; the seed note that invoked it. Accept :rationale or :why (models vary).
+  ;; The card contract lives once as the wiki Conventions card (linked in the
+  ;; footer), not restated per task; acceptance is intentionally not rendered.
+  ;; Structured for human triage: why the concept matters + a verbatim quote
+  ;; from the seed note. Accept :rationale or :why (models vary).
   (let [rationale (str/trim (str (or (:rationale task) (:why task))))
         qt        (str/trim (str (or (:quote task) (:note_quote task))))
         seed      (str/trim (str (:seed_note task)))]
-    (str rationale
-         (when (seq qt) (str "\n\n> " (str/replace qt #"\n+" "\n> ")))
-         (when (seq seed) (str "\n\nSeed: " seed))
-         "\nCards follow the wiki conventions: " (conventions-url cfg)
-         "\n\n`op: " (name (or (:op task) :create))
-         " / type: " (name (or (:type task) :concept)) "`")))
+    (str "## Why this matters\n\n" rationale "\n"
+         (when (seq qt)
+           (str "\n## From the note\n\n> " (str/replace qt #"\n+" "\n> ") "\n"))
+         "\n---\n\n"
+         (when (seq seed) (str "**Seed:** " seed "  \n"))
+         "**Conventions:** " (conventions-url cfg) "\n\n"
+         "`op: " (name (or (:op task) :create))
+         " · type: " (name (or (:type task) :concept)) "`")))
 
 (defn- propose-task-fn [cfg]
   (fn [task]
@@ -53,11 +55,9 @@
         :else
         (let [issue (gh/create-issue cfg {:title (:title task)
                                           :body (task-issue-body cfg task)
-                                          :labels ["stage:proposed"
-                                                   (str "type:" (name (or (:type task) :concept)))]})]
+                                          :labels [(str "type:" (name (or (:type task) :concept)))]})]
           (when-let [p (projects/find-project cfg)]
-            (let [item (projects/add-issue! cfg (get p "id") (get issue "node_id"))]
-              (projects/clear-status! cfg (get p "id") item)))
+            (projects/add-to-backlog! cfg (get p "id") (get issue "node_id")))
           {:filed (get issue "number") :title (:title task)})))))
 
 (defn build

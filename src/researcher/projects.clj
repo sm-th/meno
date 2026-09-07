@@ -108,6 +108,25 @@
     (gql cfg "mutation($p:ID!,$i:ID!,$f:ID!){ clearProjectV2ItemFieldValue(input:{projectId:$p,itemId:$i,fieldId:$f}){ projectV2Item { id } } }"
          {:p project-id :i item-id :f (get f "id")})))
 
+(defn item-status
+  "The Status option name for one item, or nil (= Backlog / No Status)."
+  [cfg project-id item-id]
+  (some (fn [it] (when (= item-id (get it "id")) (get-in it ["status" "name"])))
+        (items cfg project-id)))
+
+(defn add-to-backlog!
+  "Add an issue and settle it at No Status (= Backlog). GitHub's built-in
+   'item added -> Todo' workflow writes asynchronously; wait to observe that
+   write, then clear it, so fresh proposals rest in Backlog for human triage."
+  [cfg project-id issue-node-id]
+  (let [item (add-issue! cfg project-id issue-node-id)]
+    (loop [n 0]
+      (cond
+        (some? (item-status cfg project-id item)) (clear-status! cfg project-id item)
+        (< n 6) (do (Thread/sleep 1000) (recur (inc n)))
+        :else   (clear-status! cfg project-id item)))
+    item))
+
 (defn delete-project! [cfg project-id]
   (gql cfg "mutation($p:ID!){ deleteProjectV2(input:{projectId:$p}){ projectV2 { id } } }"
        {:p project-id}))
