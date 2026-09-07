@@ -110,9 +110,9 @@
          rel  (first (git/commit-post-files blog sha))
          n    (note/load-note blog rel)
          url  (str (get-in cfg [:blog :url]) (:url n))
-         body (str "A new note by Andy was published — ingest it: judge whether it carries "
-                   "established concepts worth cards, and if so file a plan task.\n\n"
-                   "**Note:** [" (:title n) "](" url ")")
+         body (str "A new note by Andy was published — ingest it: (fetch) the Seed URL to read it, "
+                   "judge whether it carries established concepts worth cards, and if so file a plan task.\n\n"
+                   "**Note:** [" (:title n) "](" url ")\n\nSeed: " url)
          issue (gh/create-issue cfg {:title  (str "Ingest: " (:title n))
                                      :body   body
                                      :labels ["role:ingest"]})]

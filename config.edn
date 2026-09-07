@@ -56,7 +56,7 @@
  ;; branch + PR. :creates -> default role of tasks this role files (propose-task!).
  :roles
  {:ingest   {:meta "meta/ingest"   :writes? false :creates "plan"
-             :tools ["recall" "central" "open-tasks" "propose-task!"]}
+             :tools ["recall" "fetch" "central" "open-tasks" "propose-task!"]}
   :plan     {:meta "meta/plan"     :writes? false :creates "research"
              :tools ["recall" "search" "fetch" "central" "reference-frequency"
                      "open-tasks" "enrich-task!" "propose-task!"]}
