@@ -74,10 +74,19 @@
          'search  (fn [q] (search/web cfg q))
          'central (fn [n] (graph/central (graph/load-graph cfg) n))
          'reference-frequency (fn [] (graph/reference-frequency (graph/load-graph cfg)))
-         'context (fn [] {:model (get-in cfg [:omp :model]) :profile profile :branch branch})}
+         'context (fn [] {:model (get-in cfg [:omp :model]) :profile profile :branch branch})
+         'open-tasks (fn [] (mapv (fn [i] {:number (get i "number") :title (get i "title")})
+                                  (gh/open-issues cfg)))}
         plan-fns  {'propose-task! (if dry?
                                     (fn [task] {:filed :dry :title (:title task)})
-                                    (propose-task-fn cfg))}
+                                    (propose-task-fn cfg))
+                   'enrich-task! (if dry?
+                                   (fn [n _] {:enriched :dry :number n})
+                                   (fn [n add]
+                                     (let [cur  (str (get (gh/get-issue cfg n) "body"))
+                                           note (str/trim (str add))]
+                                       (gh/update-issue! cfg n {:body (str cur "\n\n---\n*Researcher note:* " note)})
+                                       {:enriched n})))}
         write-fns (when w
                     {'put-concept!
                      (fn [page]

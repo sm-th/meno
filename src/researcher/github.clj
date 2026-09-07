@@ -95,3 +95,18 @@
     (if (= 200 status)
       body
       (throw (ex-info "github close-issue failed" {:status status :body body})))))
+
+(defn update-issue!
+  "Edit an existing issue's :title/:body/:labels (PATCH). Used to enrich a queued
+   task in place instead of filing a duplicate."
+  [cfg number {:keys [title body labels]}]
+  (let [resp (http/json-request {:method :patch
+                                 :url (str api "/repos/" (repo cfg) "/issues/" number)
+                                 :headers (H cfg)
+                                 :json (cond-> {}
+                                         title  (assoc :title title)
+                                         body   (assoc :body body)
+                                         labels (assoc :labels labels))})]
+    (if (= 200 (:status resp))
+      (:body resp)
+      (throw (ex-info "github update-issue failed" resp)))))
