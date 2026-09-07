@@ -204,8 +204,9 @@
           _upd    (when cid
                     (future (while @running
                               (Thread/sleep 6000)
-                              (try (gh/update-comment! cfg cid (run-comment role issue {:status :running}))
-                                   (catch Throwable _ nil)))))]
+                              (when @running
+                                (try (gh/update-comment! cfg cid (run-comment role issue {:status :running}))
+                                     (catch Throwable _ nil))))))]
       (try
         (let [{:keys [exit out err]}
               (sh "omp" "-p" "--no-tools" "--no-session" "--no-title"
@@ -230,6 +231,7 @@
                        writes? {:issue num :no-write true}
                        :else   {:issue num :done true})]
           (reset! running false)
+          (when _upd (try (deref _upd 8000 nil) (catch Throwable _ nil)))
           (budget/report)
           (when cid
             (try (gh/update-comment! cfg cid (run-comment role issue {:status :done :out out :result result}))
