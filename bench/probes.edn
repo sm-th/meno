@@ -1,9 +1,10 @@
 ;; Request-level probes: test a MODEL on the researcher's request TYPES as single
-;; bare completions (no tools, fixed inline context) — cheap, isolates the model
-;; from our deterministic pipeline. Mix of Andy's real notes, synthetic, tricky.
-;; Each: {:id :type :prompt :rubric}. Judge scores overall 1-10 by rubric.
-[{:id "extract-andy-ephemeral" :type :extract
-  :prompt "Read the NOTE and list the well-established concepts/theories it invokes or touches (there are several). For each: the concept name, whether it is a CANONICAL established concept or the author's own coinage/framing, and the phrase that invokes it. Do not invent 'established' status.\n\nNOTE (Andy Smith, 'Ephemeral agents'): Each agent runs in a sandbox prepared specifically for it. An agent with physical access to secrets will get at them sooner or later, so least privilege is the first thing you have to build. Environments are reproducible and immutable for the duration of a tick; an agent can request more rights but cannot grant them to itself; its whole state is the sandbox plus a working directory."
+;; bare completions (no tools, fixed inline context). Mix of Andy's notes,
+;; synthetic, and tricky/adversarial. Each: {:id :type :prompt :rubric}.
+;; Types: :extract (planner) · :synthesize (worker card) · :connection (bridge).
+[;; ---------- EXTRACT (planner: find the SET of established concepts) ----------
+ {:id "extract-andy-ephemeral" :type :extract
+  :prompt "Read the NOTE and list the well-established concepts/theories it invokes (there are several). For each: the concept name, whether it is a CANONICAL established concept or the author's own coinage, and the phrase that invokes it. Do not invent 'established' status.\n\nNOTE (Andy Smith, 'Ephemeral agents'): Each agent runs in a sandbox prepared specifically for it. An agent with physical access to secrets will get at them sooner or later, so least privilege is the first thing you have to build. Environments are reproducible and immutable for the duration of a tick; an agent can request more rights but cannot grant them to itself; its whole state is the sandbox plus a working directory."
   :rubric ["identifies MULTIPLE established concepts, not one"
            "covers at least: principle of least privilege, sandboxing/isolation, and any of reproducible/immutable builds, capability/permission model, ephemeral environments"
            "does NOT label the author's own phrasing as an established concept"
@@ -11,23 +12,85 @@
  {:id "extract-coinage-trap" :type :extract
   :prompt "Read the NOTE and list the well-established concepts it invokes. Mark each as canonical-established vs the author's own coined term. Do not present coined terms as established.\n\nNOTE: I wrap each task in a 'context capsule' (my term) that carries only the inputs it needs, so a single bug can't cascade — the blast radius stays small. I rebuild the capsule from a manifest on every run, so it is identical each time."
   :rubric ["identifies established concepts such as least privilege / need-to-know, fault isolation / blast-radius containment (bulkhead), reproducible/immutable builds"
-           "EXPLICITLY flags 'context capsule' as the author's own coinage, NOT an established concept"
+           "EXPLICITLY flags 'context capsule' as the author's own coinage, NOT established"
            "does not fabricate authority for 'context capsule'"
            "finds several concepts, each tied to a phrase"]}
+ {:id "extract-andy-microsandbox" :type :extract
+  :prompt "Read the NOTE and list the well-established concepts it invokes; mark canonical vs the author's coinage.\n\nNOTE (paraphrase of Andy Smith on microsandboxing): Instead of sharing one machine, each agent gets its own microVM booted from an OCI image I build with Nix. It starts in well under a second like a container but is isolated by hardware virtualization like a VM. I script the whole VM launch as code, run the agent, then throw the machine away."
+  :rubric ["identifies established concepts: microVM / hardware-virtualization sandboxing (e.g. Firecracker), containers vs VMs isolation trade-off, OCI/container images, reproducible builds (Nix), ephemeral/immutable infrastructure"
+           "lists MULTIPLE concepts, tied to phrases"
+           "does not invent 'established' status for the author's phrasing"
+           "distinguishes the container-vs-VM point rather than conflating them"]}
+ {:id "extract-distributed-note" :type :extract
+  :prompt "Read the NOTE and list the well-established concepts it invokes (several); mark canonical vs coinage.\n\nNOTE: The service shards writes across nodes and returns before all replicas ack, so a read right after a write can be stale. Clients retry on timeout, so handlers must tolerate duplicates. We cache reads and invalidate on write."
+  :rubric ["identifies: sharding/partitioning, eventual consistency (stale reads), replication, idempotency / at-least-once delivery (retries+duplicates), cache invalidation"
+           "finds MULTIPLE distinct concepts, each tied to a phrase"
+           "does not invent concepts absent from the note"
+           "does not collapse everything into one vague concept"]}
+ {:id "extract-mundane-restraint" :type :extract
+  :prompt "Read the NOTE and list only the well-established concepts it genuinely invokes; mark canonical vs coinage. If it invokes few or none, say so — do not inflate.\n\nNOTE: I renamed the project folder, fixed a typo in the README, and pushed to main."
+  :rubric ["does NOT over-extract or invent grand concepts from a mundane note"
+           "at most it may note version control / trunk-based pushing — nothing more"
+           "explicitly acknowledges there is little established theory here"
+           "no fabricated 'concepts' to seem thorough"]}
+ {:id "extract-security-note" :type :extract
+  :prompt "Read the NOTE and list the established security concepts it invokes (several); mark canonical vs coinage.\n\nNOTE: We assume any single layer can be breached, so we require multiple independent checks; every component gets only the access it needs; and nothing on the internal network is trusted just for being internal."
+  :rubric ["identifies: defense in depth (multiple independent layers), principle of least privilege, zero trust (nothing trusted by network location)"
+           "distinguishes defense-in-depth from least-privilege (different ideas)"
+           "finds MULTIPLE concepts, each tied to a phrase"
+           "does not conflate zero trust with least privilege"]}
+ ;; ---------- SYNTHESIZE (worker: encyclopedic atomic card) ----------
  {:id "synth-idempotency" :type :synthesize
-  :prompt "Write a concise, objective, ENCYCLOPEDIC wiki card for the concept 'Idempotency (computing/APIs)'. Use ONLY the sources below and cite them. One atomic idea; no opinions; no invented facts.\n\nSOURCE 1 (Wikipedia): 'An operation is idempotent if performing it multiple times has the same effect as performing it once.'\nSOURCE 2 (MDN, HTTP): 'GET, HEAD, PUT and DELETE are idempotent; POST is not. Idempotent methods can be retried safely after a failure.'"
+  :prompt "Write a concise, objective, ENCYCLOPEDIC wiki card for 'Idempotency (computing/APIs)'. Use ONLY the sources below and cite them. One atomic idea; no opinions; no invented facts.\n\nSOURCE 1 (Wikipedia): 'An operation is idempotent if performing it multiple times has the same effect as performing it once.'\nSOURCE 2 (MDN, HTTP): 'GET, HEAD, PUT and DELETE are idempotent; POST is not. Idempotent methods can be retried safely after a failure.'"
   :rubric ["precise definition consistent with the sources"
            "correct HTTP examples: GET/PUT/DELETE idempotent, POST not"
-           "atomic and encyclopedic; objective; no opinions"
-           "cites the provided sources; introduces no facts beyond them"]}
+           "atomic and encyclopedic; objective"
+           "cites the provided sources; no facts beyond them"]}
  {:id "synth-cap-bad-source" :type :synthesize
   :prompt "Write an objective, accurate wiki card for the 'CAP theorem' using the source below. Be accurate above all.\n\nSOURCE (a blog post): 'CAP says a distributed system can only ever have two of Consistency, Availability, and Partition tolerance, so you just pick any two.'"
   :rubric ["does NOT repeat the source's oversimplification ('pick any two')"
-           "states the trade-off is forced only DURING a network partition; partition tolerance is not optional in real distributed systems"
+           "states the trade-off is forced only DURING a network partition; P is not optional"
            "frames the real choice as Consistency vs Availability under partition"
            "implicitly corrects rather than propagates the source's error"]}
+ {:id "synth-linearizability" :type :synthesize
+  :prompt "Write a concise encyclopedic wiki card for 'Linearizability' using ONLY the sources; cite them; atomic; objective.\n\nSOURCE 1: 'Linearizability is a strong consistency model in which each operation appears to take effect atomically at some instant between its invocation and response.'\nSOURCE 2: 'It gives the illusion of a single copy of the data and preserves real-time ordering of operations.'"
+  :rubric ["defines it as a strong/single-copy consistency model with atomic instantaneous effect"
+           "mentions real-time ordering of operations"
+           "distinguishes it from weaker models (e.g. eventual consistency) if it links out"
+           "atomic, cites the sources, no invented facts"]}
+ {:id "synth-consistent-hashing" :type :synthesize
+  :prompt "Write a concise encyclopedic wiki card for 'Consistent hashing' using ONLY the sources; cite; atomic; objective.\n\nSOURCE 1: 'Consistent hashing maps keys and nodes onto a ring; a key is owned by the next node clockwise.'\nSOURCE 2: 'Adding or removing a node remaps only about K/n keys instead of nearly all of them; virtual nodes improve balance.'"
+  :rubric ["ring mapping; key owned by next node clockwise"
+           "adding/removing a node remaps only ~K/n keys (the key property)"
+           "mentions virtual nodes for balance"
+           "atomic; cites sources; no invented facts"]}
+ {:id "synth-merkle-tree" :type :synthesize
+  :prompt "Write a concise encyclopedic wiki card for 'Merkle tree' using ONLY the sources; cite; atomic; objective.\n\nSOURCE 1: 'A Merkle tree is a tree in which every leaf is the hash of a data block and every internal node is the hash of its children.'\nSOURCE 2: 'The root hash commits to all data; two trees can be compared top-down to locate differences in logarithmic work, and any tampering changes the root.'"
+  :rubric ["leaves = hashes of blocks; internal nodes = hash of children; root commits to all data"
+           "tamper-evident; efficient (logarithmic) diff/verification"
+           "atomic; cites sources; no invented facts"
+           "does not confuse it with a plain hash chain"]}
+ {:id "synth-two-phase-commit" :type :synthesize
+  :prompt "Write a concise encyclopedic wiki card for 'Two-phase commit (2PC)' using ONLY the sources; cite; atomic; objective.\n\nSOURCE 1: 'In 2PC a coordinator asks all participants to prepare; if all vote yes it tells them to commit, otherwise to abort.'\nSOURCE 2: 'It is a blocking protocol: if the coordinator fails after prepare, participants can be stuck holding locks until it recovers.'"
+  :rubric ["prepare/vote then commit/abort, driven by a coordinator"
+           "states the blocking weakness on coordinator failure (key limitation)"
+           "atomic; cites sources; no invented facts"
+           "does not claim 2PC tolerates coordinator failure"]}
+ {:id "synth-vector-clock" :type :synthesize
+  :prompt "Write a concise encyclopedic wiki card for 'Vector clock' using ONLY the sources; cite; atomic; objective.\n\nSOURCE 1: 'A vector clock is a vector of per-node counters; each node increments its own entry on an event and merges by element-wise maximum on message receipt.'\nSOURCE 2: 'Comparing vectors yields a partial order: it detects whether one event happened-before another or whether they are concurrent.'"
+  :rubric ["per-node counters; increment own, element-wise max on receive"
+           "gives a partial order; detects happened-before vs concurrent"
+           "atomic; cites sources; no invented facts"
+           "does not claim it gives a total order or wall-clock time"]}
+ {:id "synth-bloom-no-sources" :type :synthesize
+  :prompt "Write a concise, objective, ENCYCLOPEDIC wiki card for the 'Bloom filter'. No sources are provided — rely on well-established knowledge, and cite honestly (do NOT invent specific references or fake page numbers). Atomic; no opinions."
+  :rubric ["probabilistic set-membership over a bit array + k hash functions"
+           "no false negatives; false positives possible; standard variant cannot delete"
+           "space/accuracy trade-off via m (bits) and k (hashes)"
+           "does NOT fabricate specific citations/URLs; accuracy over authority"]}
+ ;; ---------- CONNECTION (bridge a note claim to a concept; flag misuse) ----------
  {:id "connect-correct" :type :connection
-  :prompt "A note claims: 'If a payment request is retried after a timeout, the customer could be charged twice unless the operation is idempotent.' The concept 'Idempotency' means an operation repeated yields the same effect as performing it once. Write a SHORT connection: how the claim relates to the concept; if it misinterprets the concept, flag and correct — otherwise confirm."
+  :prompt "A note claims: 'If a payment request is retried after a timeout, the customer could be charged twice unless the operation is idempotent.' The concept 'Idempotency' means an operation repeated yields the same effect as once. Write a SHORT connection: how the claim relates to the concept; if it misinterprets, flag and correct — otherwise confirm."
   :rubric ["confirms the claim correctly applies idempotency (safe retries require idempotency)"
            "does NOT raise a false misinterpretation flag"
            "concise; references the concept"
@@ -37,4 +100,28 @@
   :rubric ["flags the misinterpretation: you cannot 'drop' partition tolerance in a real distributed system"
            "corrects: the C-vs-A choice applies only during partitions"
            "objective and precise, not vague"
-           "does not endorse 'CA' as a steady-state configuration"]}]
+           "does not endorse 'CA' as a steady-state configuration"]}
+ {:id "connect-consistent-hashing-correct" :type :connection
+  :prompt "A note claims: 'We moved the cache to consistent hashing so that adding a server only moves a small fraction of keys instead of remapping everything.' The concept 'Consistent hashing' remaps only ~K/n keys when a node joins/leaves. Write a SHORT connection; confirm or flag+correct."
+  :rubric ["confirms the claim correctly applies consistent hashing (only ~K/n keys move)"
+           "does NOT raise a false misinterpretation flag"
+           "concise; references the concept"
+           "objective"]}
+ {:id "connect-eventual-misinterp" :type :connection
+  :prompt "A note claims: 'Eventual consistency just means the database will eventually become strongly consistent, so it is basically the same thing with a small delay.' The concept: eventual consistency guarantees replicas converge if updates stop, but gives no bound and reads may see stale or conflicting values. Write a SHORT connection; flag and correct if it misinterprets."
+  :rubric ["flags the misinterpretation: eventual consistency is NOT delayed strong consistency"
+           "corrects: convergence only if updates stop; no time bound; stale/conflicting reads possible"
+           "objective and precise"
+           "does not equate it with linearizability"]}
+ {:id "connect-idempotency-conflation" :type :connection
+  :prompt "A note claims: 'We added a unique request ID to make the endpoint idempotent, so now it is also thread-safe and atomic.' The concept 'Idempotency' concerns repeated requests having the same effect as one. Write a SHORT connection; flag and correct if it misinterprets."
+  :rubric ["flags the conflation: idempotency does NOT imply thread-safety or atomicity"
+           "explains they are distinct properties (concurrency/atomicity vs repeat-safety)"
+           "objective and precise"
+           "does not endorse the false implication"]}
+ {:id "connect-backpressure-correct" :type :connection
+  :prompt "A note claims: 'When our queue fills up we stop reading from the socket, which makes the producer slow down instead of us running out of memory.' The concept 'Backpressure' signals a fast producer to slow when a consumer cannot keep up. Write a SHORT connection; confirm or flag+correct."
+  :rubric ["confirms the claim correctly applies backpressure (bounded queue + stop-reading propagates flow control)"
+           "does NOT raise a false misinterpretation flag"
+           "concise; references the concept (and TCP-style flow control if apt)"
+           "objective"]}]
