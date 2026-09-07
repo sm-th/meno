@@ -118,9 +118,16 @@
          "put-concept!" (when w
                           (fn [page]
                             (let [slug (wiki/slugify (:title page))
-                                  f    (java.io.File. (str wiki-repo "/" (wiki/card-rel :concept slug)))]
-                              (if (.exists f)
+                                  f    (java.io.File. (str wiki-repo "/" (wiki/card-rel :concept slug)))
+                                  body (str (:body page))
+                                  cap  (get-in cfg [:wiki :concept-body-max] 900)]
+                              (cond
+                                (.exists f)
                                 {:skipped slug :reason "canonical concept card already exists — not rewritten"}
+                                (> (count body) cap)
+                                {:rejected slug :reason (str "concept body is " (count body) " chars > " cap
+                                                             " — a concept card is a SHORT definition; cut it and move the depth into separate question tasks")}
+                                :else
                                 (wiki/put-page! w (assoc page :type :concept))))))
          "put-connection!" (when w (fn [page] (wiki/put-page! w (assoc page :type :connection))))
          "put-answer!"     (when w (fn [page] (wiki/put-page! w (assoc page :type :answer))))
