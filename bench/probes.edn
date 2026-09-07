@@ -1,0 +1,40 @@
+;; Request-level probes: test a MODEL on the researcher's request TYPES as single
+;; bare completions (no tools, fixed inline context) — cheap, isolates the model
+;; from our deterministic pipeline. Mix of Andy's real notes, synthetic, tricky.
+;; Each: {:id :type :prompt :rubric}. Judge scores overall 1-10 by rubric.
+[{:id "extract-andy-ephemeral" :type :extract
+  :prompt "Read the NOTE and list the well-established concepts/theories it invokes or touches (there are several). For each: the concept name, whether it is a CANONICAL established concept or the author's own coinage/framing, and the phrase that invokes it. Do not invent 'established' status.\n\nNOTE (Andy Smith, 'Ephemeral agents'): Each agent runs in a sandbox prepared specifically for it. An agent with physical access to secrets will get at them sooner or later, so least privilege is the first thing you have to build. Environments are reproducible and immutable for the duration of a tick; an agent can request more rights but cannot grant them to itself; its whole state is the sandbox plus a working directory."
+  :rubric ["identifies MULTIPLE established concepts, not one"
+           "covers at least: principle of least privilege, sandboxing/isolation, and any of reproducible/immutable builds, capability/permission model, ephemeral environments"
+           "does NOT label the author's own phrasing as an established concept"
+           "ties each concept to the phrase that invokes it"]}
+ {:id "extract-coinage-trap" :type :extract
+  :prompt "Read the NOTE and list the well-established concepts it invokes. Mark each as canonical-established vs the author's own coined term. Do not present coined terms as established.\n\nNOTE: I wrap each task in a 'context capsule' (my term) that carries only the inputs it needs, so a single bug can't cascade — the blast radius stays small. I rebuild the capsule from a manifest on every run, so it is identical each time."
+  :rubric ["identifies established concepts such as least privilege / need-to-know, fault isolation / blast-radius containment (bulkhead), reproducible/immutable builds"
+           "EXPLICITLY flags 'context capsule' as the author's own coinage, NOT an established concept"
+           "does not fabricate authority for 'context capsule'"
+           "finds several concepts, each tied to a phrase"]}
+ {:id "synth-idempotency" :type :synthesize
+  :prompt "Write a concise, objective, ENCYCLOPEDIC wiki card for the concept 'Idempotency (computing/APIs)'. Use ONLY the sources below and cite them. One atomic idea; no opinions; no invented facts.\n\nSOURCE 1 (Wikipedia): 'An operation is idempotent if performing it multiple times has the same effect as performing it once.'\nSOURCE 2 (MDN, HTTP): 'GET, HEAD, PUT and DELETE are idempotent; POST is not. Idempotent methods can be retried safely after a failure.'"
+  :rubric ["precise definition consistent with the sources"
+           "correct HTTP examples: GET/PUT/DELETE idempotent, POST not"
+           "atomic and encyclopedic; objective; no opinions"
+           "cites the provided sources; introduces no facts beyond them"]}
+ {:id "synth-cap-bad-source" :type :synthesize
+  :prompt "Write an objective, accurate wiki card for the 'CAP theorem' using the source below. Be accurate above all.\n\nSOURCE (a blog post): 'CAP says a distributed system can only ever have two of Consistency, Availability, and Partition tolerance, so you just pick any two.'"
+  :rubric ["does NOT repeat the source's oversimplification ('pick any two')"
+           "states the trade-off is forced only DURING a network partition; partition tolerance is not optional in real distributed systems"
+           "frames the real choice as Consistency vs Availability under partition"
+           "implicitly corrects rather than propagates the source's error"]}
+ {:id "connect-correct" :type :connection
+  :prompt "A note claims: 'If a payment request is retried after a timeout, the customer could be charged twice unless the operation is idempotent.' The concept 'Idempotency' means an operation repeated yields the same effect as performing it once. Write a SHORT connection: how the claim relates to the concept; if it misinterprets the concept, flag and correct — otherwise confirm."
+  :rubric ["confirms the claim correctly applies idempotency (safe retries require idempotency)"
+           "does NOT raise a false misinterpretation flag"
+           "concise; references the concept"
+           "objective"]}
+ {:id "connect-misinterpretation" :type :connection
+  :prompt "A note claims: 'CAP means we chose CA and dropped partition tolerance.' The CAP theorem: during a network partition a system must choose between consistency and availability; partition tolerance is not optional in a real distributed system. Write a SHORT connection; if the claim misinterprets the concept, flag it and correct objectively."
+  :rubric ["flags the misinterpretation: you cannot 'drop' partition tolerance in a real distributed system"
+           "corrects: the C-vs-A choice applies only during partitions"
+           "objective and precise, not vague"
+           "does not endorse 'CA' as a steady-state configuration"]}]

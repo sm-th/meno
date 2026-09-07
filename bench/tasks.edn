@@ -1,0 +1,75 @@
+;; Synthetic benchmark tasks — the researcher's OWN task type (encyclopedic
+;; concept cards), across diverse domains so a model is scored on the task TYPE,
+;; not on one lucky topic. Each task: {:id :category :title :body :checkpoints}.
+;; :checkpoints are topic-specific accuracy points the judge grades in addition
+;; to the standard card contract (objectivity/atomicity/citations/links/format).
+[{:id "cap-theorem" :category :concept
+  :title "Research the CAP theorem"
+  :body "Research the CAP theorem and write its canonical encyclopedic concept card."
+  :checkpoints ["defines Consistency, Availability, Partition tolerance precisely"
+                "the trade-off is forced ONLY during a network partition (not a blanket 'pick 2 of 3')"
+                "notes that P is not optional in real distributed systems; the real choice is C vs A under partition"
+                "does NOT oversimplify to 'choose any two always'"]}
+ {:id "idempotency" :category :concept
+  :title "Research idempotency"
+  :body "Research idempotency (in computing/APIs) and write its canonical concept card."
+  :checkpoints ["precise definition: repeating an operation yields the same effect as doing it once"
+                "distinguishes idempotent from 'safe' operations"
+                "correct HTTP examples: GET/PUT/DELETE idempotent, POST generally not"
+                "connects to safe retries / at-least-once delivery"]}
+ {:id "content-addressed-storage" :category :concept
+  :title "Research content-addressed storage"
+  :body "Research content-addressed storage and write its canonical concept card."
+  :checkpoints ["address derived from a cryptographic hash of the content"
+                "gives deduplication and integrity verification"
+                "implies immutability of stored objects"
+                "real examples such as Git or IPFS"]}
+ {:id "capability-based-security" :category :concept
+  :title "Research capability-based security"
+  :body "Research capability-based security and write its canonical concept card."
+  :checkpoints ["a capability is an unforgeable token that both designates a resource AND grants access"
+                "contrasts with access-control-list (ACL) / identity-based models"
+                "mitigates the confused-deputy problem"
+                "no conflation of capabilities with plain API keys/passwords"]}
+ {:id "eventual-consistency" :category :concept
+  :title "Research eventual consistency"
+  :body "Research eventual consistency and write its canonical concept card."
+  :checkpoints ["replicas converge to the same value if no new updates are made"
+                "contrasts explicitly with strong/linearizable consistency"
+                "addresses conflict resolution (e.g. last-write-wins, vector clocks, CRDTs)"
+                "real examples such as DNS or Dynamo-style stores"]}
+ {:id "write-ahead-logging" :category :concept
+  :title "Research write-ahead logging"
+  :body "Research write-ahead logging (WAL) and write its canonical concept card."
+  :checkpoints ["the log record is durably written BEFORE the change is applied in place"
+                "provides atomicity and durability; supports crash recovery by replay"
+                "mentions fsync/flush ordering as the correctness hinge"
+                "not confused with plain application logging"]}
+ {:id "bloom-filter" :category :concept
+  :title "Research the Bloom filter"
+  :body "Research the Bloom filter and write its canonical concept card."
+  :checkpoints ["probabilistic set-membership structure over a bit array + k hash functions"
+                "no false negatives; false positives are possible"
+                "cannot delete from a standard Bloom filter (needs a counting variant)"
+                "space/accuracy trade-off via m (bits) and k (hashes)"]}
+ {:id "backpressure" :category :concept
+  :title "Research backpressure in flow control"
+  :body "Research backpressure (flow control) and write its canonical concept card."
+  :checkpoints ["a mechanism to slow a producer when a consumer cannot keep up"
+                "contrasts with unbounded buffering (memory blowup) and dropping"
+                "mentions bounded buffers / credit- or demand-based signaling"
+                "real examples such as TCP flow control or Reactive Streams"]}
+ {:id "crdt" :category :concept
+  :title "Research conflict-free replicated data types"
+  :body "Research conflict-free replicated data types (CRDTs) and write the concept card."
+  :checkpoints ["replicas converge without coordination via a merge that is commutative, associative, idempotent"
+                "distinguishes state-based (CvRDT) from operation-based (CmRDT)"
+                "concrete examples such as G-Counter, PN-Counter, OR-Set"
+                "ties to eventual consistency without a central conflict resolver"]}
+ {:id "rate-limiting" :category :concept
+  :title "Research rate limiting algorithms"
+  :body "Research rate limiting (token bucket vs leaky bucket etc.) and write the concept card."
+  :checkpoints ["token bucket allows bursts up to bucket size; leaky bucket smooths to a constant rate"
+                "correctly distinguishes the two (a common point of confusion)"
+                "mentions fixed-window vs sliding-window counters and their boundary problem"
+                "no conflation of the algorithms"]}]

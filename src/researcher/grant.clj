@@ -50,8 +50,9 @@
 (defn build
   "Build the SCI grant context. world:
      :profile   :planner | :worker (default :worker)
-     :wiki-repo :branch  enable writes (worker)."
-  [cfg {:keys [profile wiki-repo branch] :or {profile :worker}}]
+     :wiki-repo :branch  enable writes (worker)
+     :dry?      true -> propose-task! is a no-op (bench: never touch GitHub)."
+  [cfg {:keys [profile wiki-repo branch dry?] :or {profile :worker}}]
   (let [w (when (and wiki-repo branch) (wiki/writer cfg wiki-repo branch))
         read-fns
         {'recall  (fn [q k] (mapv hit->clj (index/recall cfg q k)))
@@ -60,7 +61,9 @@
          'central (fn [n] (graph/central (graph/load-graph cfg) n))
          'reference-frequency (fn [] (graph/reference-frequency (graph/load-graph cfg)))
          'context (fn [] {:model (get-in cfg [:omp :model]) :profile profile :branch branch})}
-        plan-fns  {'propose-task! (propose-task-fn cfg)}
+        plan-fns  {'propose-task! (if dry?
+                                    (fn [task] {:filed :dry :title (:title task)})
+                                    (propose-task-fn cfg))}
         write-fns (when w
                     {'put-concept!
                      (fn [page]
