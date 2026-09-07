@@ -25,16 +25,17 @@
        "/content/" (get-in cfg [:wiki :conventions] "conventions") ".md"))
 
 (defn- task-issue-body [cfg task]
-  ;; The card contract lives once as the wiki Conventions card (linked in the
-  ;; footer), not restated per task; acceptance is intentionally not rendered.
-  ;; Structured for human triage: why the concept matters + a verbatim quote
-  ;; from the seed note. Accept :rationale or :why (models vary).
+  ;; The universal card contract lives once in the wiki Conventions card (linked
+  ;; in the footer), not restated per task. A task carries, for human triage:
+  ;; why the concept matters (with the note's own words quoted inline, right where
+  ;; the point is made) and the concrete research goals that scope it.
   (let [rationale (str/trim (str (or (:rationale task) (:why task))))
-        qt        (str/trim (str (or (:quote task) (:note_quote task))))
+        goals     (->> (:goals task) (map #(str/trim (str %))) (remove str/blank?))
         seed      (str/trim (str (:seed_note task)))]
     (str "## Why this matters\n\n" rationale "\n"
-         (when (seq qt)
-           (str "\n## From the note\n\n> " (str/replace qt #"\n+" "\n> ") "\n"))
+         (when (seq goals)
+           (str "\n## Research goals\n\n"
+                (str/join "\n" (map #(str "- [ ] " %) goals)) "\n"))
          "\n---\n\n"
          (when (seq seed) (str "**Seed:** " seed "  \n"))
          "**Conventions:** " (conventions-url cfg) "\n\n"
@@ -44,12 +45,16 @@
 (defn- propose-task-fn [cfg]
   (fn [task]
     (let [rationale (str/trim (str (or (:rationale task) (:why task))))
-          open (count (gh/open-issues cfg))
-          cap  (get-in cfg [:planner :wip-cap])]
+          goals (->> (:goals task) (map #(str/trim (str %))) (remove str/blank?))
+          open  (count (gh/open-issues cfg))
+          cap   (get-in cfg [:planner :wip-cap])]
       (cond
         (< (count rationale) 20)
-        {:refused (str "task needs a substantive :rationale — why the concept matters, "
-                       "grounded in the note (>=20 chars); a bare title is not fileable")}
+        {:refused (str "task needs a substantive :rationale — why the concept matters, with the "
+                       "note's words quoted inline (>=20 chars); a bare title is not fileable")}
+        (empty? goals)
+        {:refused (str "task needs :goals — 2-4 concrete research questions that pin the subject and "
+                       "what the card must establish about it")}
         (>= open cap)
         {:refused (str "queue full: " open "/" cap " open issues — triage first")}
         :else

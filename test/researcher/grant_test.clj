@@ -27,14 +27,14 @@
   (let [s (body cfg {:rationale "Least privilege is invoked by the note" :seed_note "u"})]
     (is (str/includes? s "Least privilege is invoked by the note"))
     (is (str/includes? s "**Seed:** u"))))
-
-(deftest task-body-accepts-why-alias-and-renders-quote
-  ;; Follow-up proposals arrive with :why (not :rationale) and a verbatim :quote
-  ;; from the seed note; both must survive into the triage-facing issue body.
-  (let [s (body cfg {:why "Sandboxing isolates each agent per task"
-                     :quote "you can build an image ... run the agent in it"
+(deftest task-body-renders-goals-and-inline-quote
+  ;; Quotes are woven inline in the rationale (no separate block); research goals
+  ;; render as a checklist. :why is accepted as an alias for :rationale.
+  (let [s (body cfg {:why "Confining untrusted code; the note says \"run in a sandbox\""
+                     :goals ["the canonical, vendor-neutral definition" "how it applies to agents"]
                      :seed_note "u" :type :concept})]
-    (is (str/includes? s "Sandboxing isolates each agent per task"))
-    (is (str/includes? s "## From the note"))
-    (is (str/includes? s "> you can build an image ... run the agent in it"))
+    (is (str/includes? s "run in a sandbox"))
+    (is (str/includes? s "## Research goals"))
+    (is (str/includes? s "- [ ] the canonical, vendor-neutral definition"))
+    (is (not (str/includes? s "## From the note")))
     (is (str/includes? s "**Seed:** u"))))

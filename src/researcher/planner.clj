@@ -29,14 +29,17 @@
        "   (propose-task!\n"
        "     {:op :create :type :concept\n"
        "      :title \"Research OS-level process sandboxing\" ; verb-first; disambiguated sense\n"
-       "      :rationale \"what the concept is in a line + why it matters HERE + the exact claim in the note that invoked it\"\n"
-       "      :quote \"a short verbatim snippet copied from the note\"\n"
+       "      :rationale \"what the concept is + why it matters HERE, quoting the note's exact words inline where the point is made\"\n"
+       "      :goals [\"the precise definition and scope of the subject the note leans on\" \"how it applies to the note's use\"]\n"
        "      :seed_note \"<seed url>\"})\n\n"
-       "Every task MUST carry a substantive :rationale AND a :quote from the note - they are the human's "
-       "only triage surface (a bare title is refused). The universal card contract (encyclopedic, "
-       "objective, atomic, >=2 cited sources, densely [[wikilinked]]) is the worker's STANDING rule - do "
-       "NOT restate it in tasks. Call propose-task! once per canonical concept; if it returns {:refused "
-       "...}, stop. Act via eval; no prose answers."))
+       "Every task MUST carry a substantive :rationale (weave the note's own words inline in quotes, right "
+       "where the point is made - NOT a separate block) AND :goals: 2-4 concrete research questions that pin "
+       "what THIS card must establish about the subject the note leans on. Name the exact subject and its "
+       "scope in the title + goals (it may be a general idea OR a specific product/tool - whichever the note "
+       "actually relies on; there is no fixed preference). Goals are questions/objectives, NOT an article "
+       "outline. The universal card contract (encyclopedic, objective, atomic, >=2 cited sources, densely "
+       "[[wikilinked]]) is the worker's STANDING rule - do NOT restate it. Call propose-task! once per "
+       "concept; if {:refused ...}, stop. Act via eval; no prose answers."))
 
 (defn- mcp-json [cfg grant]
   (json/write-str
