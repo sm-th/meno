@@ -55,12 +55,12 @@
  ;; Add a role = a meta card + an entry here, no code. :writes? -> per-issue wiki
  ;; branch + PR. :creates -> default role of tasks this role files (propose-task!).
  :roles
- {:ingest   {:meta "meta/ingest"   :writes? false :creates "plan"
-             :tools ["recall" "fetch" "central" "open-tasks" "propose-task!"]}
-  :plan     {:meta "meta/plan"     :writes? false :creates "research"
+ {:ingest   {:meta "meta/skill/ingest"   :writes? false :creates "plan"
+             :tools ["recall" "central" "open-tasks" "propose-task!"]}
+  :plan     {:meta "meta/skill/plan"     :writes? false :creates "research"
              :tools ["recall" "search" "fetch" "central" "reference-frequency"
                      "open-tasks" "enrich-task!" "propose-task!"]}
-  :research {:meta "meta/research" :writes? true  :creates "research"
+  :research {:meta "meta/skill/research" :writes? true  :creates "research"
              :tools ["recall" "search" "fetch" "central" "reference-frequency"
                      "open-tasks" "put-concept!" "put-connection!" "put-reference!"
                      "propose-task!"]}}

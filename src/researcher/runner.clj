@@ -6,6 +6,7 @@
    and open a PR; others just act through their tools (e.g. propose-task!). Roles
    are DATA (config :roles + a meta card) — adding one needs no code."
   (:require [researcher.task :as task]
+            [researcher.prompt :as prompt]
             [researcher.wiki :as wiki]
             [researcher.github :as gh]
             [researcher.projects :as projects]
@@ -110,9 +111,9 @@
          rel  (first (git/commit-post-files blog sha))
          n    (note/load-note blog rel)
          url  (str (get-in cfg [:blog :url]) (:url n))
-         body (str "A new note by Andy was published — ingest it: (fetch) the Seed URL to read it, "
-                   "judge whether it carries established concepts worth cards, and if so file a plan task.\n\n"
-                   "**Note:** [" (:title n) "](" url ")\n\nSeed: " url)
+         body (str "A new note by Andy was published. Read it below and ingest it: judge "
+                   "whether it carries established concepts worth cards; if so, file a plan task.\n\n"
+                   "**Note:** [" (:title n) "](" url ")\n\n---\n\n" (:body n))
          issue (gh/create-issue cfg {:title  (str "Ingest: " (:title n))
                                      :body   body
                                      :labels ["role:ingest"]})]
@@ -129,7 +130,7 @@
   (let [role    (role-of issue)
         spec    (get-in cfg [:roles role])
         writes? (boolean (:writes? spec))
-        system  (load-meta cfg role)
+        system  (str prompt/base "\n\n---\n\n" (load-meta cfg role))
         num     (:number issue)
         base    (get-in cfg [:wiki :base] "main")
         branch  (when writes? (str (get-in cfg [:worker :branch-prefix] "researcher/issue-")

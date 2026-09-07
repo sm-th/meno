@@ -66,6 +66,19 @@
             (projects/add-to-backlog! cfg (get p "id") (get issue "node_id")))
           {:filed (get issue "number") :title (:title task)})))))
 
+(def ^:private tool-docs
+  {"recall" "(recall q [k]) — semantic search across the corpus and existing cards"
+   "fetch" "(fetch url) — readable text of an external web page (also cites it)"
+   "search" "(search q) — web search; returns candidate source URLs"
+   "central" "(central n) — the n most-linked pages in the wiki graph"
+   "reference-frequency" "(reference-frequency) — most-cited source URLs"
+   "open-tasks" "(open-tasks) — [{:number :title}] tasks already queued"
+   "propose-task!" "(propose-task! {:title :rationale :goals :seed_note :role}) — file a task"
+   "enrich-task!" "(enrich-task! n md) — append a note to an open task"
+   "put-concept!" "(put-concept! {:title :description :tags :body :sources}) — write the canonical concept card"
+   "put-connection!" "(put-connection! {:title :tags :body :seed :sources}) — write a connection card"
+   "put-reference!" "(put-reference! {:title :tags :body :sources}) — write a reference card"})
+
 (defn build
   "Build the SCI grant for a ROLE. world:
      :role      keyword/string — selects tools (cfg :roles) and labels context
@@ -106,8 +119,11 @@
          "put-reference!"  (when w (fn [page] (wiki/put-page! w (assoc page :type :reference))))}
         wanted (get-in cfg [:roles role :tools])
         chosen (if (seq wanted) wanted (keys registry))
-        ns-map (into {'context (fn [] {:model (get-in cfg [:omp :model]) :role (name role) :branch branch})}
-                     (for [t chosen :let [f (get registry t)] :when f] [(symbol t) f]))]
+        granted (vec (for [t chosen :when (get registry t)] t))
+        ns-map (into {'context (fn [] {:model (get-in cfg [:omp :model]) :role (name role) :branch branch})
+                      'tools   (fn [] (into ["(context) — your role and branch" "(tools) — this list"]
+                                            (map #(get tool-docs % (str "(" % ")")) granted)))}
+                     (for [t granted] [(symbol t) (get registry t)]))]
     (sci/init {:namespaces {'user ns-map}})))
 
 (defn eval-ctx [ctx code] (sci/eval-string* ctx code))
