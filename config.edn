@@ -70,7 +70,7 @@
 
  ;; Orchestrator: the living image polls the board and runs the next approved
  ;; (Todo) issue on its own, one at a time. Filing/approving stays manual.
- :orchestrator {:poll-ms 15000 :wip 1}   ; wip = tasks in flight at once (1 for now)
+ :orchestrator {:poll-ms 15000 :wip 1}   ; wip = tasks in flight; clamped to 1 until per-run isolation
 
  ;; GitHub Projects v2 = the approval BOARD. Separate CLASSIC token (`project`
  ;; scope) via GraphQL — fine-grained PATs can't grant user-owned Projects. See

@@ -108,20 +108,26 @@
     (reset! orchestrator true)
     (future
       (println "orchestrator: draining Todo")
-      (while @orchestrator
-        (let [cfg (config/load-config)
-              wip (get-in cfg [:orchestrator :wip] 1)]
-          (loop []
-            (when (and @orchestrator (< (count @active) wip))
-              (when-let [issue (try (runner/next-todo cfg @active) (catch Throwable _ nil))]
-                (swap! active conj (:number issue))
-                (println "orchestrator: running #" (:number issue) "(" (name (runner/role-of issue)) ")")
-                (future
-                  (try (runner/run-issue cfg issue)
-                       (catch Throwable t (println "orchestrator error #" (:number issue) ":" (.getMessage t)))
-                       (finally (swap! active disj (:number issue)))))
-                (recur))))
-          (Thread/sleep (get-in cfg [:orchestrator :poll-ms] 15000)))))
+      (let [warned (atom false)]
+        (while @orchestrator
+          (let [cfg (config/load-config)
+                wip (get-in cfg [:orchestrator :wip] 1)]
+            ;; GUARD: parallel runs share task/current + task/trace, so cap at 1 in
+            ;; flight regardless of :wip until that context is per-run isolated.
+            (when (and (> wip 1) (not @warned))
+              (println "orchestrator: :wip" wip "requested — clamped to 1 (per-run isolation not implemented yet)")
+              (reset! warned true))
+            (loop []
+              (when (and @orchestrator (< (count @active) 1))
+                (when-let [issue (try (runner/next-todo cfg @active) (catch Throwable _ nil))]
+                  (swap! active conj (:number issue))
+                  (println "orchestrator: running #" (:number issue) "(" (name (runner/role-of issue)) ")")
+                  (future
+                    (try (runner/run-issue cfg issue)
+                         (catch Throwable t (println "orchestrator error #" (:number issue) ":" (.getMessage t)))
+                         (finally (swap! active disj (:number issue)))))
+                  (recur))))
+            (Thread/sleep (get-in cfg [:orchestrator :poll-ms] 15000))))))
     :started))
 
 (defn stop-loop! [] (reset! orchestrator nil) :stopped)
