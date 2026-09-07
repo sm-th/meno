@@ -6,6 +6,7 @@
    The HTTP handler rebuilds the grant from live code+config on every request, so
    `(require ... :reload)` / config edits take effect immediately — no restart.
    Secrets/state live here; omp sessions hold only the gateway URL."
+  (:refer-clojure :exclude [run!])
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
             [nrepl.server :as nrepl]
@@ -76,30 +77,22 @@
                                :error {:code -32603 :message (.getMessage t)}})))
       nil)))
 
-(defn plan!
-  "Top-of-pipeline: run the PLAN role on the newest published note (files research
-   tasks into Backlog via propose-task!)."
-  []
-  (runner/run-issue (config/load-config) (runner/seed-issue (config/load-config) :plan)))
-
 (defn ingest!
-  "Top-of-pipeline: run the INGEST role on the newest published note."
-  []
-  (runner/run-issue (config/load-config) (runner/seed-issue (config/load-config) :ingest)))
+  "Per new article (call when a post is published): deterministically file a
+   `role:ingest` task into Backlog. No LLM — just enqueues for your triage."
+  [] (runner/file-ingest-task! (config/load-config)))
 
-(defn work!
-  "Run one approved (Todo) issue by number, or the first in the queue, under its
-   own `role:<name>` tag. Writes roles open a PR."
-  ([] (work! nil))
+(defn run!
+  "Execute the next approved (Todo) task of ANY role (or a specific issue number)
+   under its own `role:<name>` tag: load that role's wiki prompt, grant its tools,
+   run it, and — for writing roles — open a PR."
+  ([] (run! nil))
   ([number]
    (let [cfg   (config/load-config)
          issue (runner/pick cfg number)]
      (if issue
        (runner/run-issue cfg issue)
        (println "no approved (Todo) issue" (when number (str "#" number)))))))
-
-;; tick! = alias for work!: pull the next approved issue of any role.
-(def tick! work!)
 
 (defn -main [& _]
   (let [cfg   (config/load-config)

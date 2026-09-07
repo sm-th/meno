@@ -98,25 +98,33 @@
                   :labels (get gi "labels")
                   :role   (role-of {:labels (get gi "labels")}))))))
 
-(defn seed-issue
-  "Synthesize a non-GitHub seed task from the newest published note, for the
-   top-of-pipeline roles (ingest/plan) that start from a note, not an issue."
-  [cfg role]
-  (let [blog (get-in cfg [:blog :root])
-        {:keys [sha]} (git/newest-publish blog)
-        rel  (first (git/commit-post-files blog sha))
-        n    (note/load-note blog rel)]
-    {:role  role
-     :title (:title n)
-     :body  (str "SEED NOTE\nTITLE: " (:title n)
-                 "\nURL: " (str (get-in cfg [:blog :url]) (:url n)) "\n\n" (:body n))
-     :seed  (str (get-in cfg [:blog :url]) (:url n))}))
+(defn file-ingest-task!
+  "Per new article (call when a post is published): deterministically — no LLM —
+   file ONE `role:ingest` task into Backlog for triage. `run!` later runs the
+   ingest role on it (light triage → files a plan task). `slug` optional; defaults
+   to the newest published post."
+  ([cfg] (file-ingest-task! cfg nil))
+  ([cfg _slug]
+   (let [blog (get-in cfg [:blog :root])
+         {:keys [sha]} (git/newest-publish blog)
+         rel  (first (git/commit-post-files blog sha))
+         n    (note/load-note blog rel)
+         url  (str (get-in cfg [:blog :url]) (:url n))
+         body (str "A new note by Andy was published — ingest it: judge whether it carries "
+                   "established concepts worth cards, and if so file a plan task.\n\n"
+                   "**Note:** [" (:title n) "](" url ")")
+         issue (gh/create-issue cfg {:title  (str "Ingest: " (:title n))
+                                     :body   body
+                                     :labels ["role:ingest"]})]
+     (when-let [p (projects/find-project cfg)]
+       (projects/add-to-backlog! cfg (get p "id") (get issue "node_id")))
+     {:filed (get issue "number") :title (str "Ingest: " (:title n)) :role :ingest})))
 
 (defn run-issue
   "Run one issue under its role: load the role meta as the system prompt, spawn
    omp against /mcp/<role>, and — for :writes? roles — push a per-issue branch and
    open a PR closing the issue. `issue` may be a real GitHub issue (has
-   :number/:item-id) or a synthetic seed (seed-issue). Returns a result map."
+   :number/:item-id) or a bodied task with no :number. Returns a result map."
   [cfg issue]
   (let [role    (role-of issue)
         spec    (get-in cfg [:roles role])

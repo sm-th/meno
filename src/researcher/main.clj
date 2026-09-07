@@ -9,13 +9,13 @@
   (:gen-class))
 
 (defn -main [& args]
-  (let [cmd (or (first args) "plan")
+  (let [cmd (or (first args) "ingest")
         cfg (config/load-config)]
     (case cmd
-      "plan"   (runner/run-issue cfg (runner/seed-issue cfg :plan))
-      "work"   (let [i (runner/pick cfg (second args))]
+      "ingest" (println (runner/file-ingest-task! cfg))
+      "run"    (let [i (runner/pick cfg (second args))]
                  (if i (runner/run-issue cfg i) (println "no approved (Todo) issue")))
-      "launch" (sandbox/print-launch cfg (keyword (or (second args) "worker")) ["work" "N"])
+      "launch" (sandbox/print-launch cfg (keyword (or (second args) "worker")) ["run" "N"])
       "index"  (do (budget/reset-run!)
                    (println "indexed" (index/build! cfg) "docs into Qdrant")
                    (budget/report))
@@ -30,6 +30,6 @@
                             :else                         (refs/ingest-slug! cfg a)))
                         (budget/report))
       "diag"   (diag/run)
-      (println "usage: clojure -M -m researcher.main [plan|work|launch <p>|index|recall <k>|ingest-refs [all|newest|<slug>]|diag]"))
+      (println "usage: clojure -M -m researcher.main [ingest|run [N]|launch <p>|index|recall <k>|ingest-refs [all|newest|<slug>]|diag]"))
     (flush)
     nil))
