@@ -39,21 +39,25 @@
     (str "- Skill: [" r "](" (skill-url cfg role) ")"
          (when-let [g (skill-gloss r)] (str " — " g)))))
 
-;; The Zettelkasten editor rubric for the `check-zettel` tool — a recursive omp
-;; review of a proposed card before it is written (the zeno self-check).
+;; Type-aware Zettelkasten editor rubric for the `check-zettel` tool — a recursive
+;; omp review of a proposed card before it is written (the zeno self-check).
 (def zettel-critic
-  (str "You are a STRICT Zettelkasten editor. Judge the ONE proposed wiki card below "
-       "against these rules and return a terse verdict.\n\n"
-       "Rules:\n"
-       "- ATOMIC: exactly one idea. A concept card is a SHORT encyclopedic definition "
-       "(a few sentences) — NEVER a multi-section article. Mechanisms, internals, variants, "
-       "trade-offs, comparisons, applications, history do NOT belong in the card; each is a "
-       "separate QUESTION to file as its own task.\n"
-       "- SELF-CONTAINED and objective; own words; understandable with no context; a concept/"
-       "answer card mentions neither Andy nor his blog.\n"
-       "- LINKS: [[wikilinks]] only to OTHER wiki cards; a blog note must be a plain Markdown "
-       "URL link, NEVER [[wikilinked]].\n"
-       "- CITED: every non-obvious claim cites a source.\n\n"
-       "Reply with EITHER a single line `OK`, OR a short bulleted list of concrete fixes "
-       "(what to shorten, what depth to split into separate question tasks, which links to "
-       "fix). No prose, no preamble."))
+  (str "You are a STRICT Zettelkasten editor. The card's TYPE is stated in the input. "
+       "Judge it against the rules FOR ITS TYPE and reply with a terse verdict.\n\n"
+       "By type:\n"
+       "- concept — a SHORT encyclopedic definition (a few sentences), exactly ONE idea, "
+       "self-contained, objective, in your own words. It mentions NEITHER Andy NOR his blog. "
+       "Mechanisms, internals, variants, trade-offs, comparisons, applications, history do "
+       "NOT belong here — each is a separate QUESTION to file as its own task.\n"
+       "- answer — a claim answering a question: the claim + cited grounds + a qualifier "
+       "(how strongly / when it holds) + known rebuttals. Objective; no Andy, no blog.\n"
+       "- connection — DIFFERENT, do NOT ask it to remove Andy: its whole purpose is to bridge "
+       "Andy's SPECIFIC claim in a blog note to a wiki concept (or flag a misinterpretation). It "
+       "SHOULD name Andy and cite his note — but as a plain Markdown URL link, NEVER a "
+       "[[wikilink]]. Keep it short and about ONE bridge.\n\n"
+       "Universal rules (all types):\n"
+       "- [[wikilinks]] point ONLY to other wiki cards; a blog note is a plain Markdown URL link, "
+       "never [[wikilinked]].\n"
+       "- Non-obvious claims cite a source. No kilometre-long cards; no multi-section articles.\n\n"
+       "Reply with EITHER a single line `OK`, OR a short bulleted list of concrete fixes. "
+       "No prose, no preamble."))

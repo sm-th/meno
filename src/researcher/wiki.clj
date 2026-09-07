@@ -104,8 +104,12 @@
     (pos? (Integer/parseInt (str/trim (:out r))))))
 
 (defn push-branch! [cfg repo branch]
+  ;; Force-push the agent's own ephemeral per-issue branch. Safe: `researcher/issue-N`
+  ;; is never shared, and prepare-branch! rebuilds it from origin/base every run, so a
+  ;; re-run diverges from any prior PR's commits and a plain push would be rejected
+  ;; non-fast-forward ("git failed").
   (git! repo "-c" (str "core.sshCommand=" (ssh-cmd cfg))
-        "push" (str "git@github.com:" (get-in cfg [:github :repo]) ".git")
+        "push" "--force" (str "git@github.com:" (get-in cfg [:github :repo]) ".git")
         (str branch ":" branch)))
 
 (defn page-titles

@@ -38,15 +38,28 @@
       (throw (ex-info "github create-issue failed" {:status status :body body})))))
 
 (defn create-pr!
-  "Open a pull request. opts: :title :head (branch) :base :body."
+  "Open a pull request. opts: :title :head (branch) :base :body. Idempotent: if a PR
+   already exists for :head (GitHub 422), return the existing open PR instead of
+   failing - a re-run reuses its per-issue branch and its PR."
   [cfg {:keys [title head base body]}]
   (let [{:keys [status body]}
         (http/json-request {:method :post
                             :url (str api "/repos/" (repo cfg) "/pulls")
                             :headers (H cfg)
                             :json {:title title :head head :base base :body body}})]
-    (if (#{200 201} status)
-      body
+    (cond
+      (#{200 201} status) body
+      (= 422 status)
+      (let [owner (re-find #"^[^/]+" (repo cfg))
+            {s :status b :body}
+            (http/json-request {:method :get
+                                :url (str api "/repos/" (repo cfg)
+                                          "/pulls?state=open&head=" owner ":" head)
+                                :headers (H cfg)})]
+        (if (and (= 200 s) (seq b))
+          (first b)
+          (throw (ex-info "github create-pr failed" {:status status :body body}))))
+      :else
       (throw (ex-info "github create-pr failed" {:status status :body body})))))
 
 (defn get-issue
