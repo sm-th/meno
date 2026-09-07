@@ -68,6 +68,24 @@
                            "→ " (trunc (:result s) 400) "\n"))
                     steps)))))
 
+(defn- summarize-work [result]
+  ;; A human-readable digest of what the run produced, mined from the eval trace
+  ;; (filed tasks, written cards) plus the PR/error outcome.
+  (let [t     (str/join "\n" (map :result @task/trace))
+        filed (distinct (map (fn [[_ n ti]] (str "#" n " " ti))
+                             (re-seq #":filed (\d+),?\s*:title \"([^\"]*)\"" t)))
+        cards (distinct (map second (re-seq #":path \"([^\"]*)\"" t)))]
+    (str "### What I did\n\n"
+         (cond (:pr result)    (str "- Opened PR: " (:pr result) "\n")
+               (:error result) (str "- Failed to push/PR: " (:error result) "\n")
+               :else           "")
+         (when (seq cards) (str "- Wrote " (count cards) " card(s): "
+                                (str/join ", " (map #(str "`" % "`") cards)) "\n"))
+         (when (seq filed) (str "- Filed " (count filed) " follow-up task(s): " (str/join ", " filed) "\n"))
+         (when (and (empty? cards) (empty? filed) (not (:pr result)) (not (:error result)))
+           "- No changes — nothing substantive to file or write.\n")
+         "\n")))
+
 (defn- run-comment [role issue {:keys [status out result]}]
   (let [b (budget/snapshot)]
     (str "## 🤖 " (str/capitalize (name role)) " — issue #" (:number issue) "  "
@@ -77,6 +95,7 @@
                  (:error result) (str "**push/PR failed:** " (:error result)
                                       "  ·  cards committed on `" (:branch result) "`\n\n")
                  :else           ""))
+         (when (= status :done) (summarize-work result))
          "**embed cost:** $" (format "%.5f" (double (get-in b [:embed :usd])))
          " (" (get-in b [:embed :tokens]) " tok)  ·  Claude on subscription quota\n\n"
          "<details" (when (= status :done) " open") "><summary>eval trace</summary>\n\n"
@@ -236,9 +255,11 @@
           (when cid
             (try (gh/update-comment! cfg cid (run-comment role issue {:status :done :out out :result result}))
                  (catch Throwable e (println "final comment failed:" (.getMessage e)))))
-          (when (and num (not writes?) (nil? (:error result)))
-            ;; non-writing roles (ingest) produce their output as new tasks; close
-            ;; the issue on success so it does not linger In Progress.
-            (try (gh/close-issue! cfg num) (catch Throwable _ nil)))
+          (when (and num (:item-id issue) (not writes?) (nil? (:error result)))
+            ;; non-writing roles (ingest) produce their output as new tasks; move the
+            ;; issue to Done (NOT closed) so the human reviews the result and closes it.
+            (try (projects/set-status! cfg (get (projects/find-project cfg) "id") (:item-id issue)
+                                       (get-in cfg [:projects :done-status] "Done"))
+                 (catch Throwable _ nil)))
           result)
         (finally (reset! running false) (reset! task/current nil))))))

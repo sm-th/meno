@@ -82,6 +82,7 @@
             :approved-status "Todo"           ; you drag a card here -> worker picks it up
             :in-progress-status "In Progress" ; worker sets this the moment it takes the issue
             :review-status "In Review"        ; worker sets this once the PR is open (add this column in the board UI)
+            :done-status "Done"               ; non-writing roles set this on completion (issue stays open for your review)
             :backlog-status nil}              ; Backlog = No Status (planner clears; not a named option)
 
  ;; The long-lived MCP gateway: HTTP server (one eval tool) into the shared image.
