@@ -59,7 +59,7 @@
              :tools ["recall" "central" "reference-frequency" "open-tasks" "enrich-task!" "propose-task!"]}
   :research {:meta "meta/skill/research" :writes? true  :creates "research"
              :tools ["recall" "search" "fetch" "central" "reference-frequency"
-                     "open-tasks" "put-concept!" "put-connection!" "put-answer!" "put-reference!"
+                     "open-tasks" "put-concept!" "put-connection!" "put-answer!" "put-reference!" "check-zettel"
                      "propose-task!"]}}
 
  ;; GitHub issues = the task queue (planner files, you triage, worker executes).

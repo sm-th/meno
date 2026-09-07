@@ -13,7 +13,8 @@
             [researcher.github :as gh]
             [researcher.projects :as projects]
             [researcher.wiki :as wiki]
-            [researcher.prompt :as prompt]))
+            [researcher.prompt :as prompt]
+            [clojure.java.shell :refer [sh]]))
 
 (defn- hit->clj [h]
   (let [p (get h "payload")]
@@ -82,7 +83,8 @@
    "put-concept!" "(put-concept! {:title :description :tags :body :sources}) — write the canonical concept card"
    "put-connection!" "(put-connection! {:title :tags :body :seed :sources}) — write a connection card"
    "put-answer!" "(put-answer! {:title :tags :body :seed :sources}) — write an answer card: a claim answering a question, with cited grounds"
-   "put-reference!" "(put-reference! {:title :tags :body :sources}) — write a reference card"})
+   "put-reference!" "(put-reference! {:title :tags :body :sources}) — write a reference card"
+   "check-zettel" "(check-zettel {:type :title :body}) — recursively run a Zettelkasten editor over a proposed card; returns OK or a list of fixes"})
 
 (defn build
   "Build the SCI grant for a ROLE. world:
@@ -122,7 +124,14 @@
                                 (wiki/put-page! w (assoc page :type :concept))))))
          "put-connection!" (when w (fn [page] (wiki/put-page! w (assoc page :type :connection))))
          "put-answer!"     (when w (fn [page] (wiki/put-page! w (assoc page :type :answer))))
-         "put-reference!"  (when w (fn [page] (wiki/put-page! w (assoc page :type :reference))))}
+         "put-reference!"  (when w (fn [page] (wiki/put-page! w (assoc page :type :reference))))
+         "check-zettel"    (fn [card]
+                             (let [p (str "Proposed " (name (or (:type card) :concept)) " card.\n\nTITLE: "
+                                          (:title card) "\n\nBODY:\n" (str (:body card)))
+                                   r (sh "omp" "-p" "--no-tools" "--no-session" "--no-title"
+                                         "--model" (get-in cfg [:omp :model])
+                                         "--system-prompt" prompt/zettel-critic "--" p)]
+                               (str/trim (str (:out r)))))}
         wanted (get-in cfg [:roles role :tools])
         chosen (if (seq wanted) wanted (keys registry))
         granted (vec (for [t chosen :when (get registry t)] t))
