@@ -26,18 +26,31 @@
 
 (defn- task-issue-body [cfg task]
   ;; The card contract lives once as the wiki Conventions card (linked below),
-  ;; not restated per task; acceptance is intentionally not rendered.
-  (str (:rationale task) "\n\n"
-       "Seed: " (:seed_note task) "\n"
-       "Cards follow the wiki conventions: " (conventions-url cfg) "\n"
-       "\n`op: " (name (or (:op task) :create)) " / type: " (name (or (:type task) :concept)) "`"))
+  ;; not restated per task; acceptance is intentionally not rendered. What a task
+  ;; MUST carry for human triage: why the concept matters + a verbatim quote from
+  ;; the seed note that invoked it. Accept :rationale or :why (models vary).
+  (let [rationale (str/trim (str (or (:rationale task) (:why task))))
+        qt        (str/trim (str (or (:quote task) (:note_quote task))))
+        seed      (str/trim (str (:seed_note task)))]
+    (str rationale
+         (when (seq qt) (str "\n\n> " (str/replace qt #"\n+" "\n> ")))
+         (when (seq seed) (str "\n\nSeed: " seed))
+         "\nCards follow the wiki conventions: " (conventions-url cfg)
+         "\n\n`op: " (name (or (:op task) :create))
+         " / type: " (name (or (:type task) :concept)) "`")))
 
 (defn- propose-task-fn [cfg]
   (fn [task]
-    (let [open (count (gh/open-issues cfg))
+    (let [rationale (str/trim (str (or (:rationale task) (:why task))))
+          open (count (gh/open-issues cfg))
           cap  (get-in cfg [:planner :wip-cap])]
-      (if (>= open cap)
+      (cond
+        (< (count rationale) 20)
+        {:refused (str "task needs a substantive :rationale — why the concept matters, "
+                       "grounded in the note (>=20 chars); a bare title is not fileable")}
+        (>= open cap)
         {:refused (str "queue full: " open "/" cap " open issues — triage first")}
+        :else
         (let [issue (gh/create-issue cfg {:title (:title task)
                                           :body (task-issue-body cfg task)
                                           :labels ["stage:proposed"

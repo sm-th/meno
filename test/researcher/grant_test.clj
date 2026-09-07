@@ -26,3 +26,13 @@
   (let [s (body cfg {:rationale "Least privilege is invoked by the note" :seed_note "u"})]
     (is (str/includes? s "Least privilege is invoked by the note"))
     (is (str/includes? s "Seed: u"))))
+
+(deftest task-body-accepts-why-alias-and-renders-quote
+  ;; Follow-up proposals arrive with :why (not :rationale) and a verbatim :quote
+  ;; from the seed note; both must survive into the triage-facing issue body.
+  (let [s (body cfg {:why "Sandboxing isolates each agent per task"
+                     :quote "you can build an image ... run the agent in it"
+                     :seed_note "u" :type :concept})]
+    (is (str/includes? s "Sandboxing isolates each agent per task"))
+    (is (str/includes? s "> you can build an image ... run the agent in it"))
+    (is (str/includes? s "Seed: u"))))

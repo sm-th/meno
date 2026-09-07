@@ -21,16 +21,19 @@
        "never invent 'established' status.\n"
        "2. (recall <concept>) for each to skip ones already covered by an existing card.\n"
        "3. For EACH remaining canonical concept, file a LEAN task (do NOT outline the article, do NOT "
-       "guess or supply sources — the worker researches). Title MUST be imperative, VERB FIRST:\n"
+       "guess or supply sources - the worker researches). If a concept name is ambiguous (e.g. "
+       "\"sandboxing\"), SCOPE the title to the exact sense the note uses. Title imperative, VERB FIRST:\n"
        "   (propose-task!\n"
        "     {:op :create :type :concept\n"
-       "      :title \"Research the principle of least privilege\"   ; verb-first imperative\n"
-       "      :rationale \"the concept in a line + the exact phrase in the note that invoked it\"\n"
+       "      :title \"Research OS-level process sandboxing\" ; verb-first; disambiguated sense\n"
+       "      :rationale \"what the concept is in a line + why it matters HERE + the exact claim in the note that invoked it\"\n"
+       "      :quote \"a short verbatim snippet copied from the note\"\n"
        "      :seed_note \"<seed url>\"})\n\n"
-       "The universal card contract (encyclopedic, objective, atomic, >=2 cited sources, densely "
-       "[[wikilinked]]) is the worker's STANDING rule — do NOT restate it in tasks. Call propose-task! "
-       "once per canonical concept; if it returns {:refused ...} (queue full), stop. Act via eval; no "
-       "prose answers."))
+       "Every task MUST carry a substantive :rationale AND a :quote from the note - they are the human's "
+       "only triage surface (a bare title is refused). The universal card contract (encyclopedic, "
+       "objective, atomic, >=2 cited sources, densely [[wikilinked]]) is the worker's STANDING rule - do "
+       "NOT restate it in tasks. Call propose-task! once per canonical concept; if it returns {:refused "
+       "...}, stop. Act via eval; no prose answers."))
 
 (defn- mcp-json [cfg grant]
   (json/write-str
