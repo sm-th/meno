@@ -1,7 +1,12 @@
-# Model bench (request-level, comparative) — 2026-09-07T07:19:53.635485Z
+# Model bench (request-level, comparative)
 
-Judge: `anthropic/claude-sonnet-4-5`  ·  probes: 6  ·  models: 5
-Bare `omp -p --no-tools` completions; per-probe comparative scoring; Δ limit % = worst usage-window delta for the model's provider during its generation.
+_Updated 2026-09-07T07:23:42.288529Z._  Judge: `anthropic/claude-sonnet-4-5` · probes: 6 · models: 5. Bare `omp -p --no-tools` completions; per-probe comparative scoring; Δ limit % = worst usage-window delta for the model's provider during generation.
+
+## Conclusion
+
+- **Overall best:** `opencode-go/deepseek-v4-pro` (9.17/10).
+- **Best per request type:** extract → `opencode-go/glm-5.2`, synthesize → `opencode-go/deepseek-v4-pro`, connection → `opencode-go/deepseek-v4-pro`.
+- **Recommendation:** split by class for cost — extract: `opencode-go/glm-5.2`; synthesize: `opencode-go/deepseek-v4-pro`; connection: `opencode-go/deepseek-v4-pro`. Single-model fallback: `opencode-go/deepseek-v4-pro`.
 
 ## Ranking
 
@@ -12,6 +17,16 @@ Bare `omp -p --no-tools` completions; per-probe comparative scoring; Δ limit % 
 | `opencode-go/kimi-k2.6` | 7.83 | 3 (opencode-go) | 1/6 |
 | `anthropic/claude-sonnet-4-5` | 7.00 | -1 (anthropic) | 1/6 |
 | `opencode-go/deepseek-v4-flash` | 7.00 | 0 (opencode-go) | 1/6 |
+
+## By request type (avg /10 — choose a model per class)
+
+| model | extract | synthesize | connection |
+|---|---|---|---|
+| `opencode-go/deepseek-v4-pro` | 9.0 | 9.0 | 9.5 |
+| `opencode-go/glm-5.2` | 9.5 | 9.0 | 5.0 |
+| `opencode-go/kimi-k2.6` | 6.5 | 9.0 | 8.0 |
+| `anthropic/claude-sonnet-4-5` | 5.5 | 6.5 | 9.0 |
+| `opencode-go/deepseek-v4-flash` | 9.0 | 6.5 | 5.5 |
 
 ## Per probe (score /10, ★ = judged best)
 

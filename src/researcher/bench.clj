@@ -86,12 +86,26 @@
         types     (distinct (map :type probes))
         model-avg (fn [m] (avg (map #(get-in % [:scores m]) judged)))
         mt-avg    (fn [m t] (avg (map #(get-in % [:scores m])
-                                      (filter #(= t (:type %)) judged))))]
-    (str "# Model bench (request-level, comparative) — " (java.time.Instant/now) "\n\n"
-         "Judge: `" judge "`  ·  probes: " (count probes) "  ·  models: " (count models) "\n"
-         "Bare `omp -p --no-tools` completions; per-probe comparative scoring; "
-         "Δ limit % = worst usage-window delta for the model's provider during its generation.\n\n"
-         "## Ranking\n\n| model | avg /10 | Δ limit % | best-of-probe |\n|---|---|---|---|\n"
+                                      (filter #(= t (:type %)) judged))))
+        best-of   (fn [f] (first (sort-by (comp - f) models)))
+        overall   (best-of model-avg)
+        per-type  (into {} (for [t types] [t (best-of #(mt-avg % t))]))
+        split?    (> (count (distinct (vals per-type))) 1)]
+    (str "# Model bench (request-level, comparative)\n\n"
+         "_Updated " (java.time.Instant/now) "._  Judge: `" judge "` · probes: " (count probes)
+         " · models: " (count models) ". Bare `omp -p --no-tools` completions; per-probe comparative "
+         "scoring; Δ limit % = worst usage-window delta for the model's provider during generation.\n\n"
+         "## Conclusion\n\n"
+         "- **Overall best:** `" overall "` (" (format "%.2f" (double (model-avg overall))) "/10).\n"
+         "- **Best per request type:** "
+         (str/join ", " (for [t types] (str (name t) " → `" (get per-type t) "`"))) ".\n"
+         "- **Recommendation:** "
+         (if split?
+           (str "split by class for cost — "
+                (str/join "; " (for [t types] (str (name t) ": `" (get per-type t) "`")))
+                ". Single-model fallback: `" overall "`.")
+           (str "one model — `" overall "` — wins every class."))
+         "\n\n## Ranking\n\n| model | avg /10 | Δ limit % | best-of-probe |\n|---|---|---|---|\n"
          (str/join "\n"
                    (for [m (sort-by (comp - model-avg) models)]
                      (str "| `" m "` | " (format "%.2f" (double (model-avg m)))
@@ -124,34 +138,40 @@
                (assoc (judge-probe judge p (get answers (:id p)))
                       :probe (:id p) :type (:type p))))))
 
-(defn- write-out [stamp judge probes usage judged]
-  (io/make-parents (str "bench/results/" stamp ".md"))
-  (spit (str "bench/results/" stamp ".md") (report-md judge probes usage judged))
-  (spit (str "bench/results/" stamp ".edn") (pr-str judged))
-  (println "\nwrote bench/results/" stamp ".md"))
+(defn- write-out [judge probes usage judged]
+  (io/make-parents "bench/REPORT.md")
+  (spit "bench/REPORT.md" (report-md judge probes usage judged))
+  (spit "bench/judged.edn" (pr-str judged))
+  (println "\nwrote bench/REPORT.md"))
 
 (defn bench
-  "Generate all answers (saved), then comparative-judge each probe. opts:
-   {:models [str] :judge str :probes <path>}."
+  "Generate all answers (saved to bench/answers.edn), then comparative-judge each
+   probe and write the single bench/REPORT.md. opts: {:models [str] :judge :probes}."
   [{:keys [models judge probes]}]
   (let [judge (or judge "anthropic/claude-sonnet-4-5")
         ps    (load-probes (or probes "bench/probes.edn"))
-        stamp (str/replace (str (java.time.Instant/now)) #"[:.]" "-")
         {:keys [answers usage]} (generate models ps)
-        _      (spit (str "bench/results/" stamp "-answers.edn")
-                     (pr-str {:answers answers :usage usage}))
+        _      (spit "bench/answers.edn" (pr-str {:answers answers :usage usage}))
         judged (judge-all judge ps answers)]
-    (write-out stamp judge ps usage judged)
-    {:stamp stamp :judged judged :usage usage}))
+    (write-out judge ps usage judged)
+    {:judged judged :usage usage}))
 
 (defn rejudge
-  "Re-run comparative judging on saved answers (no regeneration / no candidate
-   limit spend). `answers-path` = a bench/results/<ts>-answers.edn."
-  [answers-path & {:keys [judge]}]
+  "Re-judge saved answers (bench/answers.edn) — no regeneration / no candidate
+   limit spend — and rewrite bench/REPORT.md."
+  [& {:keys [judge]}]
   (let [judge (or judge "anthropic/claude-sonnet-4-5")
-        {:keys [answers usage]} (edn/read-string (slurp answers-path))
+        {:keys [answers usage]} (edn/read-string (slurp "bench/answers.edn"))
         ps     (load-probes)
-        stamp  (str (str/replace (str (java.time.Instant/now)) #"[:.]" "-") "-rejudge")
         judged (judge-all judge ps answers)]
-    (write-out stamp judge ps usage judged)
-    {:stamp stamp :judged judged :usage usage}))
+    (write-out judge ps usage judged)
+    {:judged judged :usage usage}))
+
+(defn render
+  "Rebuild bench/REPORT.md from saved bench/answers.edn + bench/judged.edn with no
+   model calls (use after tweaking the report format)."
+  [& _]
+  (let [{:keys [usage]} (edn/read-string (slurp "bench/answers.edn"))
+        judged (edn/read-string (slurp "bench/judged.edn"))
+        ps     (load-probes)]
+    (write-out "anthropic/claude-sonnet-4-5" ps usage judged)))
