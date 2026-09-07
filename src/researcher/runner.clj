@@ -86,6 +86,20 @@
            "- No changes — nothing substantive to file or write.\n")
          "\n")))
 
+(defn- pr-body [issue]
+  ;; Rich PR description mined from the eval trace: the cards this branch adds and
+  ;; the follow-up tasks it filed, plus the task it closes.
+  (let [t     (str/join "\n" (map :result @task/trace))
+        cards (map (fn [[_ p ti]] (str "- `" p "` — " ti))
+                   (re-seq #":path \"([^\"]*)\"[^}]*?:title \"([^\"]*)\"" t))
+        filed (distinct (map (fn [[_ n ti]] (str "- #" n " " ti))
+                             (re-seq #":filed (\d+),?\s*:title \"([^\"]*)\"" t)))]
+    (str "Closes #" (:number issue) "\n\n"
+         "Auto-drafted by the `research` skill for **" (:title issue) "**.\n\n"
+         (when (seq cards) (str "### Cards\n" (str/join "\n" cards) "\n\n"))
+         (when (seq filed) (str "### Follow-up tasks filed\n" (str/join "\n" filed) "\n\n"))
+         "Review the card(s) in the diff below; merging accepts them and closes the issue.")))
+
 (defn- run-comment [role issue {:keys [status out result]}]
   (let [b (budget/snapshot)]
     (str "## 🤖 " (str/capitalize (name role)) " — issue #" (:number issue) "  "
@@ -239,8 +253,7 @@
                          (wiki/push-branch! cfg repo branch)
                          (let [pr (gh/create-pr! cfg {:title (str "wiki: " (:title issue))
                                                       :head  branch :base base
-                                                      :body  (str "Closes #" num
-                                                                  "\n\nAuto-drafted by the researcher (" (name role) ").")})]
+                                                      :body  (pr-body issue)})]
                            (when (:item-id issue)
                              (try (projects/set-status! cfg (get (projects/find-project cfg) "id") (:item-id issue)
                                                         (get-in cfg [:projects :review-status] "In Review"))
