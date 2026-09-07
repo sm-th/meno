@@ -45,7 +45,7 @@
 
 (def section
   "Wiki subfolder per card type — keeps meta/concepts/references/connections apart."
-  {:concept "concepts" :reference "references" :connection "connections" :meta "meta"})
+  {:concept "concepts" :reference "references" :connection "connections" :answer "answers" :meta "meta"})
 
 (defn card-rel [type slug]
   (str "content/" (get section (or type :concept) "concepts") "/" slug ".md"))

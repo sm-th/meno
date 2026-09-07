@@ -108,6 +108,9 @@
     (reset! orchestrator true)
     (future
       (println "orchestrator: draining Todo")
+      (try (let [n (runner/requeue-orphans! (config/load-config))]
+             (when (seq n) (println "orchestrator: re-queued orphaned In Progress ->" n)))
+           (catch Throwable _ nil))
       (let [warned (atom false)]
         (while @orchestrator
           (let [cfg (config/load-config)

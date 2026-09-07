@@ -112,6 +112,22 @@
                   :labels (get gi "labels")
                   :role   (role-of {:labels (get gi "labels")}))))))
 
+(defn requeue-orphans!
+  "On image startup, any issue still In Progress has no live run (the process just
+   came up), so move it back to the approved (Todo) status to re-run — recovers a
+   run interrupted by a crash/restart. Returns the numbers re-queued."
+  [cfg]
+  (let [pid  (get (projects/find-project cfg) "id")
+        ip   (get-in cfg [:projects :in-progress-status] "In Progress")
+        todo (get-in cfg [:projects :approved-status] "Todo")]
+    (->> (projects/items cfg pid)
+         (keep (fn [it]
+                 (when (= ip (get-in it ["status" "name"]))
+                   (try (projects/set-status! cfg pid (get it "id") todo)
+                        (get-in it ["content" "number"])
+                        (catch Throwable _ nil)))))
+         vec)))
+
 (defn- fenced-md
   "Wrap text in a ```md fence long enough to survive any backtick run inside it,
    so the embedded note never bleeds into the surrounding task instructions."
@@ -122,12 +138,12 @@
 
 (defn- ingest-body [cfg n url]
   (str "## Objective\n\n"
-       "Triage this newly published note; if it carries established concepts worth "
-       "encyclopedic cards, file ONE plan task.\n\n"
+       "Ingest this newly published note: extract the established concepts it leans on "
+       "and file a `research` task for each. If it carries no established concepts, file nothing.\n\n"
        "## Definition of Done\n\n"
-       "- [ ] Note read and judged: real established concepts vs a pure status update / link dump\n"
-       "- [ ] If worth planning: exactly one `role:plan` \"Plan concepts from …\" task filed (no duplicate)\n"
-       "- [ ] If not worth planning: nothing filed\n\n"
+       "- [ ] Note read; canonical concepts identified (vs Andy's own coinage) — or judged as none\n"
+       "- [ ] One `role:research` task filed per canonical concept not already carded or queued (deduped)\n"
+       "- [ ] Nothing filed if the note carries no established concepts\n\n"
        "## References\n\n"
        (prompt/skill-ref cfg :ingest) "\n"
        "- Seed: " url "\n\n"
@@ -218,5 +234,9 @@
           (when cid
             (try (gh/update-comment! cfg cid (run-comment role issue {:status :done :out out :result result}))
                  (catch Throwable e (println "final comment failed:" (.getMessage e)))))
+          (when (and num (not writes?) (nil? (:error result)))
+            ;; non-writing roles (ingest) produce their output as new tasks; close
+            ;; the issue on success so it does not linger In Progress.
+            (try (gh/close-issue! cfg num) (catch Throwable _ nil)))
           result)
         (finally (reset! running false) (reset! task/current nil))))))

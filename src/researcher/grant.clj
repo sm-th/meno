@@ -81,6 +81,7 @@
    "enrich-task!" "(enrich-task! n md) — append a note to an open task"
    "put-concept!" "(put-concept! {:title :description :tags :body :sources}) — write the canonical concept card"
    "put-connection!" "(put-connection! {:title :tags :body :seed :sources}) — write a connection card"
+   "put-answer!" "(put-answer! {:title :tags :body :seed :sources}) — write an answer card: a claim answering a question, with cited grounds"
    "put-reference!" "(put-reference! {:title :tags :body :sources}) — write a reference card"})
 
 (defn build
@@ -120,6 +121,7 @@
                                 {:skipped slug :reason "canonical concept card already exists — not rewritten"}
                                 (wiki/put-page! w (assoc page :type :concept))))))
          "put-connection!" (when w (fn [page] (wiki/put-page! w (assoc page :type :connection))))
+         "put-answer!"     (when w (fn [page] (wiki/put-page! w (assoc page :type :answer))))
          "put-reference!"  (when w (fn [page] (wiki/put-page! w (assoc page :type :reference))))}
         wanted (get-in cfg [:roles role :tools])
         chosen (if (seq wanted) wanted (keys registry))

@@ -22,8 +22,7 @@
 ;; A one-line gloss per role so a task issue is self-explanatory to a human reader
 ;; who does not open the skill.
 (def skill-gloss
-  {"ingest"   "triage the note; if it is worthwhile, file a plan task"
-   "plan"     "break the note into one research task per canonical concept"
+  {"ingest"   "extract the note's established concepts and file a research task for each"
    "research" "write the concept card (cited, wikilinked) and open a PR"})
 
 (defn skill-url
