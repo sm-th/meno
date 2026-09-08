@@ -28,22 +28,19 @@
        "/content/" (get-in cfg [:wiki :conventions] "conventions") ".md"))
 
 (defn- task-issue-body [cfg task]
-  ;; A concept research task is a self-contained spec for human triage AND the agent:
-  ;; the CONTEXT (why/how a source frames the concept), verbatim QUOTES, the ANGLE to
-  ;; pursue, and a Definition of Done. URL(s) accrue in References as more sources touch
-  ;; the same concept (enrich-task!).
+  ;; A concept research task carries only what is SPECIFIC to this source: the CONTEXT
+  ;; (why/how it frames the concept), verbatim QUOTES, and the ANGLE. HOW to write the
+  ;; card (its structure/contract) lives in the stage prompt in code, not here. URL(s)
+  ;; accrue in References as more sources touch the same concept (enrich-task!).
   (let [rationale (str/trim (str (or (:rationale task) (:why task))))
         quotes    (->> (:quotes task) (map #(str/trim (str %))) (remove str/blank?))
         angle     (str/trim (str (:angle task)))
-        goals     (->> (:goals task) (map #(str/trim (str %))) (remove str/blank?))
         seed      (str/trim (str (:seed_note task)))
         role      (keyword (or (:role task) :research))]
     (str "## Context\n\n" rationale "\n"
          (when (seq quotes)
            (str "\n## From the source\n\n" (str/join "\n" (map #(str "> " %) quotes)) "\n"))
          (when-not (str/blank? angle) (str "\n## Angle\n\n" angle "\n"))
-         (when (seq goals)
-           (str "\n## Definition of Done\n\n" (str/join "\n" (map #(str "- [ ] " %) goals)) "\n"))
          "\n## References\n\n"
          (when (seq seed) (str "- Source: " seed "\n"))
          (process/practice-ref role) "\n\n"
@@ -53,30 +50,27 @@
 (defn- propose-task-fn [cfg child]
   (fn [task]
     (let [rationale (str/trim (str (or (:rationale task) (:why task))))
-          goals (->> (:goals task) (map #(str/trim (str %))) (remove str/blank?))
+          title (str "Add " (name (or (:type task) :concept)) ": " (str/trim (str (:title task))))
           open  (count (gh/open-issues cfg))
           cap   (get-in cfg [:planner :wip-cap])]
       (cond
         (< (count rationale) 20)
-        {:refused (str "seed needs a substantive :rationale — why this is worth researching, with the "
-                       "note's words quoted inline (>=20 chars); a bare title is not fileable")}
-        (empty? goals)
-        {:refused (str "seed needs :goals — 2-4 concrete research questions that pin the subject and "
-                       "what a good result must establish")}
+        {:refused (str "task needs a substantive :rationale — the CONTEXT: why this is worth "
+                       "researching and how the source frames the concept, quoting inline (>=20 chars)")}
         (>= open cap)
         {:refused (str "queue full: " open "/" cap " open issues — triage first")}
         :else
-        (let [role  (keyword child)   ; target role = the stage's :creates; ignore a stray task :role (models confuse it with :type)
-              issue (gh/create-issue cfg {:title (:title task)
+        (let [role  (keyword child)   ; target role = stage's :creates; ignore a stray task :role
+              issue (gh/create-issue cfg {:title title
                                           :body (task-issue-body cfg (assoc task :role role))
                                           :labels [(str "type:" (name (or (:type task) :concept)))
                                                    (str "role:" (name role))]})]
           (when-let [p (projects/find-project cfg)]
             (projects/add-to-backlog! cfg (get p "id") (get issue "node_id")))
-          (try (index/index-task! cfg {:number (get issue "number") :title (:title task)
+          (try (index/index-task! cfg {:number (get issue "number") :title title
                                        :rationale rationale :url (get issue "html_url")})
                (catch Throwable _ nil))
-          {:filed (get issue "number") :title (:title task)})))))
+          {:filed (get issue "number") :title title})))))
 
 (def ^:private tool-docs
   {"recall" "(recall q [k]) — semantic search across the corpus and existing cards"
@@ -115,7 +109,7 @@
                                    (gh/open-issues cfg)))
          "propose-task!" (if dry?
                            (fn [task]
-                             (println (str "\n===== DRY propose-task! =====\nTITLE: " (:title task)
+                             (println (str "\n===== DRY propose-task! =====\nTITLE: Add " (name (or (:type task) :concept)) ": " (:title task)
                                            "\nLABELS: type:" (name (or (:type task) :concept)) " role:" (name child)
                                            "\n----- BODY -----\n" (task-issue-body cfg (assoc task :role child))
                                            "\n=============================="))
