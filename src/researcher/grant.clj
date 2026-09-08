@@ -108,7 +108,7 @@
    "put-concept!" "(put-concept! {:title :description :tags :body :sources}) — write the canonical concept card"
    "put-connection!" "(put-connection! {:title :tags :body :seed :sources}) — write a connection card"
    "put-answer!" "(put-answer! {:title :tags :body :seed :sources}) — write an answer card: a claim answering a question, with cited grounds"
-   "put-reference!" "(put-reference! {:title :tags :body :sources}) — write a reference card"
+   "put-reference!" "(put-reference! {:title :url :author :date :kind :tags :body :sources}) — write a reference card; :url (required), :author, :date, :kind land in the frontmatter for later parsing"
    "check-zettel" "(check-zettel {:type :title :body}) — recursively run a Zettelkasten editor over a proposed card; returns OK or a list of fixes"})
 
 (defn build
@@ -189,7 +189,12 @@
                                   (assoc (wiki/put-page! w (assoc page :type :concept)) :amended existed))))))
          "put-connection!" (when w (fn [page] (if dry? (do (println (str "\n===== DRY put-connection! -> " (wiki/card-rel :connection (wiki/slugify (:title page))) " =====\n" (wiki/render (assoc page :type :connection)) "\n==============================")) (flush) {:dry :connection :title (:title page)}) (wiki/put-page! w (assoc page :type :connection)))))
          "put-answer!"     (when w (fn [page] (if dry? (do (println (str "\n===== DRY put-answer! -> " (wiki/card-rel :answer (wiki/slugify (:title page))) " =====\n" (wiki/render (assoc page :type :answer)) "\n==============================")) (flush) {:dry :answer :title (:title page)}) (wiki/put-page! w (assoc page :type :answer)))))
-         "put-reference!"  (when w (fn [page] (if dry? (do (println (str "\n===== DRY put-reference! -> " (wiki/card-rel :reference (wiki/slugify (:title page))) " =====\n" (wiki/render (assoc page :type :reference)) "\n==============================")) (flush) {:dry :reference :title (:title page)}) (wiki/put-page! w (assoc page :type :reference)))))
+         "put-reference!"  (when w (fn [page]
+                             (if (str/blank? (str (:url page)))
+                               {:rejected (:title page) :reason "a reference card needs a :url — it goes in the frontmatter so the source is machine-parsable"}
+                               (if dry?
+                                 (do (println (str "\n===== DRY put-reference! -> " (wiki/card-rel :reference (wiki/slugify (:title page))) " =====\n" (wiki/render (assoc page :type :reference)) "\n==============================")) (flush) {:dry :reference :title (:title page)})
+                                 (wiki/put-page! w (assoc page :type :reference))))))
          "check-zettel"    (fn [card]
                              (let [p (str "Proposed " (name (or (:type card) :concept)) " card.\n\nTITLE: "
                                           (:title card) "\n\nBODY:\n" (str (:body card)))

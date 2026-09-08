@@ -47,75 +47,43 @@
   (str (when-let [n (:number issue)] (str "ISSUE #" n "\n"))
        "TITLE: " (:title issue) "\n\n" (:body issue)))
 
-(defn- trunc [s n]
-  (let [s (str s)] (if (> (count s) n) (str (subs s 0 n) " …[+" (- (count s) n) "]") s)))
+(defn- mined-cards
+  "Card paths+titles this branch WROTE, mined from the eval trace (put-*! results)."
+  [trace-str]
+  (distinct (map (fn [[_ p ti]] (str "- `" p "` — " ti))
+                 (re-seq #":path \"([^\"]*)\"[^}]*?:title \"([^\"]*)\"" trace-str))))
 
-(defn- trace-md []
-  (let [steps @task/trace]
-    (str "**eval calls:** " (count steps) "\n\n"
-         (str/join "\n"
-                   (map-indexed
-                    (fn [i s]
-                      (str (inc i) ". `[" (if (:ok? s) "ok" "ERR") " " (:ms s) "ms]`\n"
-                           "```clojure\n" (trunc (:code s) 700) "\n```\n"
-                           "→ " (trunc (:result s) 400) "\n"))
-                    steps)))))
+(defn- mined-filed
+  "Follow-up tasks this run FILED, mined from the eval trace (propose-*! results)."
+  [trace-str]
+  (distinct (map (fn [[_ n ti]] (str "- #" n " " ti))
+                 (re-seq #":filed (\d+),?\s*:title \"([^\"]*)\"" trace-str))))
 
-(defn- summarize-work [result]
-  ;; A human-readable digest of what the run produced, mined from the eval trace
-  ;; (filed tasks, written cards) plus the PR/error outcome.
+(defn- work-summary
+  "What the run DID — cards written + follow-up tasks filed — posted on the ISSUE (the
+   task), NOT the PR. The PR describes only what it adds; the task carries the outcome."
+  []
   (let [t     (str/join "\n" (map :result @task/trace))
-        filed (distinct (map (fn [[_ n ti]] (str "#" n " " ti))
-                             (re-seq #":filed (\d+),?\s*:title \"([^\"]*)\"" t)))
-        cards (distinct (map second (re-seq #":path \"([^\"]*)\"" t)))]
-    (str "### What I did\n\n"
-         (cond (:pr result)    (str "- Opened PR: " (:pr result) "\n")
-               (:error result) (str "- Failed to push/PR: " (:error result) "\n")
-               :else           "")
-         (when (seq cards) (str "- Wrote " (count cards) " card(s): "
-                                (str/join ", " (map #(str "`" % "`") cards)) "\n"))
-         (when (seq filed) (str "- Filed " (count filed) " follow-up task(s): " (str/join ", " filed) "\n"))
-         (when (and (empty? cards) (empty? filed) (not (:pr result)) (not (:error result)))
-           "- No changes — nothing substantive to file or write.\n")
-         "\n")))
+        cards (mined-cards t)
+        filed (mined-filed t)]
+    (str (when (seq cards) (str "### Cards written\n" (str/join "\n" cards) "\n\n"))
+         (when (seq filed) (str "### Follow-up tasks filed\n" (str/join "\n" filed) "\n\n"))
+         (when (and (empty? cards) (empty? filed)) "_No cards written or tasks filed._"))))
 
-(defn- pr-body [issue]
-  ;; Rich PR description mined from the eval trace: the cards this branch adds and
-  ;; the follow-up tasks it filed. Closes its issue, or - for a dangling-link deref
-  ;; (no issue) - names the cards that requested the now-materialized one.
-  (let [t     (str/join "\n" (map :result @task/trace))
-        cards (map (fn [[_ p ti]] (str "- `" p "` — " ti))
-                   (re-seq #":path \"([^\"]*)\"[^}]*?:title \"([^\"]*)\"" t))
-        filed (distinct (map (fn [[_ n ti]] (str "- #" n " " ti))
-                             (re-seq #":filed (\d+),?\s*:title \"([^\"]*)\"" t)))
+(defn- pr-body
+  "The PR describes only what it ADDS — the card(s) in the diff. What the run DID
+   (follow-up tasks filed, the eval transcript) lives on the issue, not here."
+  [issue]
+  (let [cards (mined-cards (str/join "\n" (map :result @task/trace)))
         num   (:number issue)]
     (str (if num
            (str "Closes #" num "\n\n")
            (str "Materializes the missing card **[[" (:card issue) "]]**, requested by: "
                 (str/join ", " (:refs issue)) ".\n\n"))
-         "Auto-drafted by the `research` skill for **" (:title issue) "**.\n\n"
-         (when (seq cards) (str "### Cards\n" (str/join "\n" cards) "\n\n"))
-         (when (seq filed) (str "### Follow-up tasks filed\n" (str/join "\n" filed) "\n\n"))
+         (when (seq cards) (str "Adds to the wiki:\n\n" (str/join "\n" cards) "\n\n"))
          (if num
            "Review the card(s) in the diff below; merging accepts them and closes the issue."
            "Review the card(s) in the diff below; merging adds them to the wiki."))))
-
-(defn- run-comment [role issue {:keys [status out result]}]
-  (let [b (budget/snapshot)]
-    (str "## 🤖 " (str/capitalize (name role)) " — issue #" (:number issue) "  "
-         (case status :running "⏳ running…" :done "✅ done" (str status)) "\n\n"
-         (when result
-           (cond (:pr result)    (str "**PR:** " (:pr result) "  ·  branch `" (:branch result) "`\n\n")
-                 (:error result) (str "**push/PR failed:** " (:error result)
-                                      "  ·  cards committed on `" (:branch result) "`\n\n")
-                 :else           ""))
-         (when (= status :done) (summarize-work result))
-         "**embed cost:** $" (format "%.5f" (double (get-in b [:embed :usd])))
-         " (" (get-in b [:embed :tokens]) " tok)  ·  Claude on subscription quota\n\n"
-         "<details" (when (= status :done) " open") "><summary>eval trace</summary>\n\n"
-         (trace-md) "\n</details>"
-         (when out (str "\n\n<details><summary>omp final output</summary>\n\n```\n"
-                        (trunc out 3000) "\n```\n</details>")))))
 
 (defn pick
   "First approved (Todo) issue of ANY role (or a specific number), enriched with
@@ -343,10 +311,10 @@
         (budget/report)
         (when num
           (try (gh/comment-issue! cfg num
-                 (cond (:pr result)       (str "✅ done · PR " (:pr result))
+                 (cond (:pr result)       (str "✅ done · PR " (:pr result) "\n\n" (work-summary))
                        (:error result)    (str "❌ push/PR failed: " (:error result))
                        (:no-write result) "ⓘ nothing written (no card changed)"
-                       :else              "✅ done"))
+                       :else              (str "✅ done\n\n" (work-summary))))
                (catch Throwable _ nil)))
         (when num (post-stats! cfg num (or (:model spec) (get-in cfg [:omp :model])) dur out))
         (when (and num (:item-id issue) (not writes?) (nil? (:error result)))
