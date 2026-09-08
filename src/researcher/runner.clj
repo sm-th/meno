@@ -170,41 +170,32 @@
         fence   (apply str (repeat (max 3 (inc longest)) \`))]
     (str fence "md\n" s "\n" fence)))
 
-(defn- ingest-body [cfg n url]
-  (str "## Objective\n\n"
-       "READ this newly published note (Adler analytical reading): come to terms with its "
-       "CONCEPTS, its CLAIMS (what it asserts), and the open QUESTIONS it leaves — and file "
-       "one research seed per unit worth researching. A pure status update / link dump -> "
-       "file nothing.\n\n"
-       "## Definition of Done\n\n"
-       "- [ ] Note read; concepts / claims / open questions identified — or judged as none\n"
-       "- [ ] One seed filed per unit (typed :concept|:claim|:question), deduped against cards + open tasks\n"
-       "- [ ] Nothing filed if the note carries nothing researchable\n\n"
-       "## References\n\n"
-       (process/practice-ref :ingest) "\n"
-       "- Seed: " url "\n\n"
-       "## Note\n\n"
-       "**[" (:title n) "](" url ")**\n\n" (fenced-md (:body n))))
+(defn- ingest-body [url context]
+  (str "## Source\n\n" url "\n\n"
+       "## Context\n\n"
+       (let [c (str/trim (str context))]
+         (if (str/blank? c) "_(none given — judge from the page itself)_" c)) "\n"))
 
 (defn file-ingest-task!
-  "Per new article (call when a post is published): deterministically — no LLM —
-   file ONE `role:ingest` task into Backlog for triage. `run!` later runs the
-   ingest role on it (light triage → files a plan task). `slug` optional; defaults
-   to the newest published post."
-  ([cfg] (file-ingest-task! cfg nil))
-  ([cfg _slug]
-   (let [blog (get-in cfg [:blog :root])
-         {:keys [sha]} (git/newest-publish blog)
-         rel  (first (git/commit-post-files blog sha))
-         n    (note/load-note blog rel)
-         url  (str (get-in cfg [:blog :url]) (:url n))
-         body (ingest-body cfg n url)
-         issue (gh/create-issue cfg {:title  (str "Ingest: " (:title n))
-                                     :body   body
+  "File ONE `role:ingest` task into Backlog: just a URL (+ an optional short line of
+   context). READ fetches and reads the page. Zero-arg defaults to the newest published
+   post; pass a url (and context) to ingest any page by hand."
+  ([cfg] (file-ingest-task! cfg nil nil))
+  ([cfg url] (file-ingest-task! cfg url nil))
+  ([cfg url context]
+   (let [[title link] (if url
+                        [(str url) url]
+                        (let [blog (get-in cfg [:blog :root])
+                              {:keys [sha]} (git/newest-publish blog)
+                              rel (first (git/commit-post-files blog sha))
+                              n   (note/load-note blog rel)]
+                          [(:title n) (str (get-in cfg [:blog :url]) (:url n))]))
+         issue (gh/create-issue cfg {:title  (str "Ingest: " title)
+                                     :body   (ingest-body link context)
                                      :labels ["role:ingest"]})]
      (when-let [p (projects/find-project cfg)]
        (projects/add-to-backlog! cfg (get p "id") (get issue "node_id")))
-     {:filed (get issue "number") :title (str "Ingest: " (:title n)) :role :ingest})))
+     {:filed (get issue "number") :title (str "Ingest: " title) :role :ingest})))
 
 (defn run-issue
   "Run one issue under its role: load the role meta as the system prompt, spawn

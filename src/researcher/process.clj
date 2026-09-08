@@ -43,9 +43,10 @@
 
 (def read-system
   (str "STAGE: READ.  PRACTICE: Adler's analytical reading + the Zettelkasten literature-note step.\n\n"
-       "Your input is a TEXT (Andy's note, or ANY other text), given in full in a fenced ```md "
-       "block. Read it analytically and record it as a LITERATURE NOTE — a reference card — then "
-       "open the research frontier it implies.\n\n"
+       "Your input is a task naming a SOURCE — a URL, and maybe a short line of context (why it "
+       "was added / what to look for). FIRST `(fetch <url>)` to pull the page text. Then read it "
+       "analytically and record it as a LITERATURE NOTE — a reference card — then open the research "
+       "frontier it implies.\n\n"
        "STEP 1 — WRITE ONE REFERENCE CARD (put-reference!):\n"
        "  (put-reference! {:title \"<source title>\"\n"
        "     :author \"<author>\" :url \"<source url>\" :date \"<publish date if known>\" :kind \"<blog|paper|article>\"\n"
@@ -165,7 +166,7 @@
     :practice "Adler analytical reading + Zettelkasten literature note"
     :writes?  true
     :creates  :research
-    :tools    ["recall" "open-tasks" "enrich-task!" "propose-task!" "put-reference!"]
+    :tools    ["recall" "fetch" "open-tasks" "enrich-task!" "propose-task!" "put-reference!"]
     :model    "opencode-go/deepseek-v4-pro"
     :system   read-system}
 
