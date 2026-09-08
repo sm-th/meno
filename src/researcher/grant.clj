@@ -161,7 +161,7 @@
         wanted (:tools (process/spec role))
         chosen (if (seq wanted) wanted (keys registry))
         granted (vec (for [t chosen :when (get registry t)] t))
-        ns-map (into {'context (fn [] {:model (get-in cfg [:omp :model]) :role (name role) :branch branch})
+        ns-map (into {'context (fn [] {:model (or (:model (process/spec role)) (get-in cfg [:omp :model])) :role (name role) :branch branch})
                       'tools   (fn [] (into ["(context) — your role and branch" "(tools) — this list"]
                                             (map #(get tool-docs % (str "(" % ")")) granted)))}
                      (for [t granted] [(symbol t) (get registry t)]))]
