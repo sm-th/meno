@@ -120,13 +120,17 @@
   [cfg]
   (let [pid  (get (projects/find-project cfg) "id")
         ip   (get-in cfg [:projects :in-progress-status] "In Progress")
-        todo (get-in cfg [:projects :approved-status] "Todo")]
+        todo (get-in cfg [:projects :approved-status] "Todo")
+        done (get-in cfg [:projects :done-status] "Done")]
     (->> (projects/items cfg pid)
          (keep (fn [it]
                  (when (= ip (get-in it ["status" "name"]))
-                   (try (projects/set-status! cfg pid (get it "id") todo)
-                        (get-in it ["content" "number"])
-                        (catch Throwable _ nil)))))
+                   ;; a CLOSED orphan already finished (its PR merged / issue closed) ->
+                   ;; settle it Done; an OPEN one had its run interrupted -> re-queue to Todo.
+                   (let [closed? (= "CLOSED" (get-in it ["content" "state"]))]
+                     (try (projects/set-status! cfg pid (get it "id") (if closed? done todo))
+                          [(get-in it ["content" "number"]) (if closed? :done :requeued)]
+                          (catch Throwable _ nil))))))
          vec)))
 
 
@@ -300,10 +304,6 @@
                        (let [pr (gh/create-pr! cfg {:title (:title issue)
                                                     :head  branch :base base
                                                     :body  (pr-body issue)})]
-                         (when (:item-id issue)
-                           (try (projects/set-status! cfg (get (projects/find-project cfg) "id") (:item-id issue)
-                                                      (get-in cfg [:projects :review-status] "Done"))
-                                (catch Throwable _ nil)))
                          {:issue num :branch branch :pr (get pr "html_url")})
                        (catch Throwable e {:issue num :branch branch :error (.getMessage e)}))
                      writes? {:issue num :no-write true}
@@ -317,9 +317,11 @@
                        :else              (str "✅ done\n\n" (work-summary))))
                (catch Throwable _ nil)))
         (when num (post-stats! cfg num (or (:model spec) (get-in cfg [:omp :model])) dur out))
-        (when (and num (:item-id issue) (not writes?) (nil? (:error result)))
+        ;; GUARANTEED terminal transition off "In Progress" on EVERY finish path
+        ;; (PR opened, nothing written, or push/PR error) so no card ever lingers there.
+        (when (and num (:item-id issue))
           (try (projects/set-status! cfg (get (projects/find-project cfg) "id") (:item-id issue)
-                                     (get-in cfg [:projects :done-status] "Done"))
+                 (get-in cfg [:projects (if (:pr result) :review-status :done-status)] "Done"))
                (catch Throwable _ nil)))
         result)
       (finally (reset! task/current nil)))))

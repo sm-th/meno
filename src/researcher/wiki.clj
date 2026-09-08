@@ -17,12 +17,20 @@
       (throw (ex-info "git failed" {:args args :err (:err r)})))
     r))
 
+(defn as-list
+  "Coerce an LLM-supplied field to a seq of strings: a string stays ONE item
+   (never exploded into characters), a collection is kept as-is, nil -> empty.
+   Guards every 'list' field the model might hand us as a bare string."
+  [x]
+  (cond (nil? x) [] (sequential? x) x :else [x]))
+
 (defn render
   "Render a card to Markdown. page: :title :type :description :tags :body :sources
    [url] :collection-url :seed. For :reference cards, bibliographic fields
    :author :url :date :kind go in the frontmatter."
   [{:keys [title type description tags body sources collection-url seed author url date kind]}]
-  (str "---\n"
+  (let [tags (as-list tags) sources (as-list sources)]
+   (str "---\n"
        "title: " title "\n"
        "type: " (name (or type :concept)) "\n"
        (when kind (str "kind: " kind "\n"))
@@ -37,7 +45,7 @@
        (when (seq sources)
          (str "\n## Sources\n\n" (str/join "\n" (map #(str "- " %) sources)) "\n"))
        (when collection-url
-         (str "\nSaved references: " collection-url "\n"))))
+         (str "\nSaved references: " collection-url "\n")))))
 
 (defn writer
   "Bind a writer to a wiki working copy + target branch, using bot identity from

@@ -33,7 +33,7 @@
    HOW to write the card lives in the INVESTIGATE prompt, not here."
   [{:keys [rationale why quotes angle seed_note]}]
   (let [ctx (str/trim (str (or rationale why)))
-        qs  (->> quotes (map #(str/trim (str %))) (remove str/blank?))
+        qs  (->> (wiki/as-list quotes) (map #(str/trim (str %))) (remove str/blank?))
         ang (str/trim (str angle))
         src (str/trim (str seed_note))]
     (str "## Context\n\n" ctx "\n"
@@ -50,7 +50,7 @@
   [{:keys [rationale context why angle goals seed_note]}]
   (let [ctx (str/trim (str (or rationale context why)))
         ang (str/trim (str angle))
-        gs  (->> goals (map #(str/trim (str %))) (remove str/blank?))
+        gs  (->> (wiki/as-list goals) (map #(str/trim (str %))) (remove str/blank?))
         src (str/trim (str seed_note))]
     (str "## Context\n\n" ctx "\n"
          (when-not (str/blank? ang) (str "\n## Angle\n\n" ang "\n"))
