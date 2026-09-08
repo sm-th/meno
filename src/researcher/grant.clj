@@ -69,7 +69,7 @@
         (let [role  (keyword child)   ; target role = the stage's :creates; ignore a stray task :role (models confuse it with :type)
               issue (gh/create-issue cfg {:title (:title task)
                                           :body (task-issue-body cfg (assoc task :role role))
-                                          :labels [(str "type:" (name (or (:type task) :seed)))
+                                          :labels [(str "type:" (name (or (:type task) :concept)))
                                                    (str "role:" (name role))]})]
           (when-let [p (projects/find-project cfg)]
             (projects/add-to-backlog! cfg (get p "id") (get issue "node_id")))
@@ -116,7 +116,7 @@
          "propose-task!" (if dry?
                            (fn [task]
                              (println (str "\n===== DRY propose-task! =====\nTITLE: " (:title task)
-                                           "\nLABELS: type:" (name (or (:type task) :seed)) " role:" (name child)
+                                           "\nLABELS: type:" (name (or (:type task) :concept)) " role:" (name child)
                                            "\n----- BODY -----\n" (task-issue-body cfg (assoc task :role child))
                                            "\n=============================="))
                              (flush)
