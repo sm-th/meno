@@ -18,12 +18,17 @@
     r))
 
 (defn render
-  "Render a concept/reference page to Markdown. page: :title :type :description
-   :tags :body :sources [url] :collection-url."
-  [{:keys [title type description tags body sources collection-url seed]}]
+  "Render a card to Markdown. page: :title :type :description :tags :body :sources
+   [url] :collection-url :seed. For :reference cards, bibliographic fields
+   :author :url :date :kind go in the frontmatter."
+  [{:keys [title type description tags body sources collection-url seed author url date kind]}]
   (str "---\n"
        "title: " title "\n"
        "type: " (name (or type :concept)) "\n"
+       (when kind (str "kind: " kind "\n"))
+       (when author (str "author: " author "\n"))
+       (when url (str "url: " url "\n"))
+       (when date (str "date: " date "\n"))
        (when description (str "description: " description "\n"))
        (when (seq tags) (str "tags: [" (str/join ", " tags) "]\n"))
        (when seed (str "seed: " seed "\n"))
@@ -112,13 +117,6 @@
         "push" "--force" (str "git@github.com:" (get-in cfg [:github :repo]) ".git")
         (str branch ":" branch)))
 
-(defn remote-branch?
-  "True if `branch` exists on the public remote - used to skip a dangling link that
-   is already being worked (its card branch is open). Token-less: repo is public."
-  [cfg branch]
-  (let [remote (str "https://github.com/" (get-in cfg [:github :repo]) ".git")
-        r (sh "git" "ls-remote" "--heads" remote branch)]
-    (boolean (seq (str/trim (str (:out r)))))))
 
 (defn page-titles
   "Slugs of existing wiki cards (recursively under content/) — dedup context."

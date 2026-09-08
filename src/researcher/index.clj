@@ -5,6 +5,7 @@
             [researcher.qdrant :as qdrant]
             [researcher.note :as note]
             [researcher.git :as git]
+            [researcher.github :as gh]
             [clojure.string :as str])
   (:import (java.util UUID)))
 
@@ -46,3 +47,23 @@
             :when (not= (get p "slug") (:slug n))]
       (println (format "  %.3f  [%s] %s"
                        (double (get h "score")) (get p "kind") (get p "title"))))))
+
+(defn index-task!
+  "Embed and upsert ONE open issue as a point (kind \"task\") so recall surfaces the
+   task queue for dedup — a near-duplicate existing seed is found, not re-filed."
+  [cfg {:keys [number title rationale url]}]
+  (let [[v] (embed/embed-texts cfg [(str title "\n" rationale)])]
+    (qdrant/upsert! cfg [{:id (uuid (str "task-" number)) :vector v
+                          :payload {:kind "task" :number number :title title :url url}}])))
+
+(defn sync-tasks!
+  "Reconcile task vectors with the live open issues: drop all task points, then
+   re-index every open issue. Idempotent; run on boot and after the queue changes."
+  [cfg]
+  (qdrant/ensure-collection! cfg (get-in cfg [:embed :dim]))
+  (qdrant/delete-by-filter! cfg {:must [{:key "kind" :match {:value "task"}}]})
+  (let [open (gh/open-issues cfg)]
+    (doseq [i open]
+      (index-task! cfg {:number (get i "number") :title (get i "title")
+                        :rationale (str (get i "body")) :url (get i "html_url")}))
+    (count open)))

@@ -42,38 +42,35 @@
 ;; ---------------------------------------------------------------------------
 
 (def read-system
-  (str "STAGE: READ.  PRACTICE: Mortimer Adler's analytical reading + the Zettelkasten "
-       "literature-note step.\n\n"
-       "Your input is a TEXT (Andy's note, or ANY other text), given in full in a fenced "
-       "```md block. Do NOT research it yet — read it and extract the units worth "
-       "researching, faithfully, quoting the text.\n\n"
-       "Analytical reading — extract THREE kinds of unit (Adler's interpretive rules):\n"
-       "1. COME TO TERMS -> CONCEPTS: the key established ideas the text rests on. A concept's "
-       "TITLE is the CANONICAL SHORT NOUN you would actually [[link]] — 1-4 words, the tag name "
-       "(e.g. `Ephemeral agents`, `Least privilege`, `Moore's law`), normalised (canonical, "
-       "singular) so links and backlinks resolve to ONE hub. NEVER put a definition, qualifier, "
-       "or dash/colon clause in a concept title — the definition is the card body, filled later.\n"
-       "2. PROPOSITIONS -> CLAIMS: what the text ASSERTS (affirms or denies) — a thesis, "
-       "usually Andy's. Quote the sentence; note how it is supported.\n"
-       "3. PROBLEMS -> QUESTIONS: what the text raises but leaves UNSOLVED, or the open "
-       "question a claim provokes.\n\n"
-       "A seed is a research INQUIRY, NEVER an engineering task. NEVER 'Design/Build/"
-       "Implement/Specify X' — you research the problem space a claim lives in; you do not "
-       "design anyone's system. A question asks what is known / how it is done / under what "
-       "conditions a claim holds.\n\n"
-       "For EACH unit worth researching, file ONE seed (several calls expected):\n"
-       "  (propose-task! {:op :create :type <:concept|:claim|:question>\n"
-       "     :title \"<concept: the canonical SHORT noun / link-target, NOT its definition; "
-       "claim: the full assertion as a sentence; question: the full question>\"\n"
-       "     :rationale \"why it is worth researching, QUOTING the text inline\"\n"
-       "     :goals [\"what a good result must establish\" \"what evidence or comparison "
-       "would settle it\"]\n"
-       "     :seed_note \"<the text's URL>\"})\n\n"
-       "Dedup FIRST: (recall <unit>) to skip what a card already covers; (open-tasks) to "
-       "skip what is already queued. Duplicate -> skip it, or (enrich-task! N \"a new "
-       "angle\") to append instead. Call propose-task! ONCE per real unit — no trial or "
-       "test calls. If the text carries nothing researchable (a pure status update / link "
-       "dump), file nothing. Then stop."))
+  (str "STAGE: READ.  PRACTICE: Adler's analytical reading + the Zettelkasten literature-note step.\n\n"
+       "Your input is a TEXT (Andy's note, or ANY other text), given in full in a fenced ```md "
+       "block. Read it analytically and record it as a LITERATURE NOTE — a reference card — then "
+       "open the research frontier it implies.\n\n"
+       "STEP 1 — WRITE ONE REFERENCE CARD (put-reference!):\n"
+       "  (put-reference! {:title \"<source title>\"\n"
+       "     :author \"<author>\" :url \"<source url>\" :date \"<publish date if known>\" :kind \"<blog|paper|article>\"\n"
+       "     :body \"<a faithful SUMMARY of the source in your own words. Weave the key CONCEPTS as "
+       "[[wikilinks]] — [[Ephemeral agents]], [[Least privilege]] — canonical short nouns. State the "
+       "source's main CLAIMS and the open QUESTIONS it leaves, quoting briefly.>\"})\n"
+       "  The [[wikilinks]] are deliberately DANGLING — those concept cards do not exist yet; that IS "
+       "the frontier.\n\n"
+       "STEP 2 — FILE ONE FILL-IN SEED PER UNIT worth researching (propose-task!), carrying THIS "
+       "source's justification:\n"
+       "  - concept  -> :type :concept,  title = the canonical short noun (the [[link]] you left)\n"
+       "  - claim    -> :type :claim,    title = the assertion, as a sentence\n"
+       "  - question -> :type :question, title = the question, as a sentence\n"
+       "  (propose-task! {:op :create :type <...> :title \"...\"\n"
+       "     :rationale \"why it is worth researching — QUOTE the source\"\n"
+       "     :goals [\"what a good result must establish\" \"possible angles / what would settle it\"]\n"
+       "     :seed_note \"<source url>\"})\n"
+       "  A seed is a research INQUIRY, NEVER an engineering task (no Design/Build/Implement).\n\n"
+       "DEDUP FIRST: (recall <unit> 8) finds existing cards AND open tasks about it (both are indexed). "
+       "If one already covers it, do NOT duplicate — skip it, or (enrich-task! N \"new quotes / a new "
+       "angle from this source\") to append this source's context to the existing task. (open-tasks) "
+       "lists the queue.\n\n"
+       "Call put-reference! once and propose-task! once per real unit — no trial/test calls. If the "
+       "text carries nothing researchable (a pure status update / link dump), write no card and file "
+       "nothing. Then stop."))
 
 ;; ---------------------------------------------------------------------------
 ;; INVESTIGATE — inquiry + syntopical reading + STORM/PRISMA + Toulmin,
@@ -165,10 +162,9 @@
   {:ingest
    {:stage    "READ"
     :practice "Adler analytical reading + Zettelkasten literature note"
-    :writes?  false
+    :writes?  true
     :creates  :research
-    :tools    ["recall" "central" "reference-frequency" "open-tasks"
-               "enrich-task!" "propose-task!"]
+    :tools    ["recall" "open-tasks" "enrich-task!" "propose-task!" "put-reference!"]
     :system   read-system}
 
    :research

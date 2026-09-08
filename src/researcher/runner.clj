@@ -161,44 +161,6 @@
                         (catch Throwable _ nil)))))
          vec)))
 
-(defn- link-context
-  "Up to two lines from `path` that mention [[title]] - shows the researcher how an
-   existing card uses the missing link, so the new card fits its callers."
-  [path title]
-  (->> (str/split-lines (slurp path))
-       (filter #(str/includes? % (str "[[" title)))
-       (take 2)
-       (mapv str/trim)))
-
-(defn- seed-body [title referrers ctx]
-  (str "A card is MISSING. Existing cards link to [[" title "]] but no such card exists yet.\n\n"
-       "Materialize it: research **" title "** and write that ONE card (plus the links inside it). "
-       "Do NOT write other cards in this run — every [[link]] you leave becomes its own future card. "
-       "File genuinely new open questions as separate seeds.\n\n"
-       "Referenced by: " (str/join ", " referrers) "\n\n"
-       (when (seq ctx) (str "How they use it:\n" (str/join "\n" (map #(str "- " %) ctx))))))
-
-(defn next-dangling
-  "Top actionable dangling link as a numberless research seed, or nil. Reads the
-   frontier from a fresh origin/base tree; skips links already being worked (their
-   `card/<slug>` branch exists on the remote) or in `exclude` (by card title)."
-  [cfg exclude]
-  (let [base   (get-in cfg [:wiki :base] "main")
-        wc     (wiki/prepare-branch! cfg base)
-        g      (graph/load-graph (assoc-in cfg [:wiki :root] wc))
-        prefix (get-in cfg [:worker :card-branch-prefix] "researcher/card/")
-        ex     (set exclude)
-        cand   (->> (graph/dangling g)
-                    (remove #(or (contains? ex (:title %))
-                                 (wiki/remote-branch? cfg (str prefix (wiki/slugify (:title %)))))))]
-    (when-let [d (first cand)]
-      (let [title (:title d)
-            paths (keep #(get-in g [:nodes % :path]) (:referrers d))
-            ctx   (mapcat #(link-context % title) paths)]
-        {:title title :card title :role :research
-         :branch (str prefix (wiki/slugify title))
-         :refs (:referrers d)
-         :body (seed-body title (:referrers d) ctx)}))))
 
 (defn- fenced-md
   "Wrap text in a ```md fence long enough to survive any backtick run inside it,

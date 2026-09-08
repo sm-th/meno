@@ -20,7 +20,7 @@
 (defn- hit->clj [h]
   (let [p (get h "payload")]
     {:score (get h "score") :kind (get p "kind") :title (get p "title")
-     :url (get p "url") :source (get p "source")}))
+     :number (get p "number") :url (get p "url") :source (get p "source")}))
 
 (defn- conventions-url [cfg]
   (str "https://github.com/" (get-in cfg [:github :repo])
@@ -69,6 +69,9 @@
                                                    (str "role:" (name role))]})]
           (when-let [p (projects/find-project cfg)]
             (projects/add-to-backlog! cfg (get p "id") (get issue "node_id")))
+          (try (index/index-task! cfg {:number (get issue "number") :title (:title task)
+                                       :rationale rationale :url (get issue "html_url")})
+               (catch Throwable _ nil))
           {:filed (get issue "number") :title (:title task)})))))
 
 (def ^:private tool-docs
@@ -118,27 +121,36 @@
          "enrich-task!" (if dry?
                           (fn [n _] {:enriched :dry :number n})
                           (fn [n add]
-                            (let [cur  (str (get (gh/get-issue cfg n) "body"))
+                            (let [gi   (gh/get-issue cfg n)
+                                  cur  (str (get gi "body"))
                                   note (str/trim (str add))]
                               (gh/update-issue! cfg n {:body (str cur "\n\n---\n*Researcher note:* " note)})
+                              (try (index/index-task! cfg {:number n :title (get gi "title")
+                                                           :rationale (str cur " " note) :url (get gi "html_url")})
+                                   (catch Throwable _ nil))
                               {:enriched n})))
          "put-concept!" (when w
                           (fn [page]
-                            (let [slug (wiki/slugify (:title page))
-                                  f    (java.io.File. (str wiki-repo "/" (wiki/card-rel :concept slug)))
-                                  body (str (:body page))
-                                  cap  (get-in cfg [:wiki :concept-body-max] 900)]
-                              (cond
-                                (.exists f)
-                                {:skipped slug :reason "canonical concept card already exists — not rewritten"}
-                                (> (count body) cap)
-                                {:rejected slug :reason (str "concept body is " (count body) " chars > " cap
-                                                             " — a concept card is a SHORT definition; cut it and move the depth into separate question tasks")}
-                                :else
-                                (wiki/put-page! w (assoc page :type :concept))))))
-         "put-connection!" (when w (fn [page] (wiki/put-page! w (assoc page :type :connection))))
-         "put-answer!"     (when w (fn [page] (wiki/put-page! w (assoc page :type :answer))))
-         "put-reference!"  (when w (fn [page] (wiki/put-page! w (assoc page :type :reference))))
+                            (if dry?
+                              (do (println (str "\n===== DRY put-concept! =====\n"
+                                                (wiki/render (assoc page :type :concept))
+                                                "\n==============================")) (flush)
+                                  {:dry :concept :title (:title page)})
+                              (let [slug (wiki/slugify (:title page))
+                                    f    (java.io.File. (str wiki-repo "/" (wiki/card-rel :concept slug)))
+                                    body (str (:body page))
+                                    cap  (get-in cfg [:wiki :concept-body-max] 900)]
+                                (cond
+                                  (.exists f)
+                                  {:skipped slug :reason "canonical concept card already exists — not rewritten"}
+                                  (> (count body) cap)
+                                  {:rejected slug :reason (str "concept body is " (count body) " chars > " cap
+                                                               " — a concept card is a SHORT definition; cut it and move the depth into separate question tasks")}
+                                  :else
+                                  (wiki/put-page! w (assoc page :type :concept)))))))
+         "put-connection!" (when w (fn [page] (if dry? (do (println (str "\n===== DRY put-connection! =====\n" (wiki/render (assoc page :type :connection)) "\n==============================")) (flush) {:dry :connection :title (:title page)}) (wiki/put-page! w (assoc page :type :connection)))))
+         "put-answer!"     (when w (fn [page] (if dry? (do (println (str "\n===== DRY put-answer! =====\n" (wiki/render (assoc page :type :answer)) "\n==============================")) (flush) {:dry :answer :title (:title page)}) (wiki/put-page! w (assoc page :type :answer)))))
+         "put-reference!"  (when w (fn [page] (if dry? (do (println (str "\n===== DRY put-reference! =====\n" (wiki/render (assoc page :type :reference)) "\n==============================")) (flush) {:dry :reference :title (:title page)}) (wiki/put-page! w (assoc page :type :reference)))))
          "check-zettel"    (fn [card]
                              (let [p (str "Proposed " (name (or (:type card) :concept)) " card.\n\nTITLE: "
                                           (:title card) "\n\nBODY:\n" (str (:body card)))

@@ -15,7 +15,8 @@
             [researcher.grant :as grant]
             [researcher.runner :as runner]
             [researcher.task :as task]
-            [researcher.process :as process])
+            [researcher.process :as process]
+            [researcher.index :as index])
   (:import (com.sun.net.httpserver HttpServer HttpHandler HttpExchange)
            (java.net InetSocketAddress))
   (:gen-class))
@@ -130,25 +131,14 @@
               (reset! warned true))
             (loop []
               (when (and @orchestrator (< (count @active) 1))
-                (if-let [issue (try (runner/next-todo cfg @active) (catch Throwable _ nil))]
-                  (do
-                    (swap! active conj (:number issue))
-                    (println "orchestrator: running #" (:number issue) "(" (name (runner/role-of issue)) ")")
-                    (future
-                      (try (runner/run-issue cfg issue)
-                           (catch Throwable t (println "orchestrator error #" (:number issue) ":" (.getMessage t)))
-                           (finally (swap! active disj (:number issue)))))
-                    (recur))
-                  ;; no approved Todo -> autonomously dereference ONE dangling [[link]]:
-                  ;; the wiki's own frontier, most-wanted missing card first, one PR each.
-                  (when-let [seed (try (runner/next-dangling cfg @active) (catch Throwable _ nil))]
-                    (swap! active conj (:card seed))
-                    (println "orchestrator: dereferencing [[" (:card seed) "]] requested by" (:refs seed))
-                    (future
-                      (try (runner/run-issue cfg seed)
-                           (catch Throwable t (println "orchestrator deref error [[" (:card seed) "]]:" (.getMessage t)))
-                           (finally (swap! active disj (:card seed)))))
-                    (recur)))))
+                (when-let [issue (try (runner/next-todo cfg @active) (catch Throwable _ nil))]
+                  (swap! active conj (:number issue))
+                  (println "orchestrator: running #" (:number issue) "(" (name (runner/role-of issue)) ")")
+                  (future
+                    (try (runner/run-issue cfg issue)
+                         (catch Throwable t (println "orchestrator error #" (:number issue) ":" (.getMessage t)))
+                         (finally (swap! active disj (:number issue)))))
+                  (recur))))
             (Thread/sleep (get-in cfg [:orchestrator :poll-ms] 15000))))))
     :started))
 
@@ -168,6 +158,7 @@
     (nrepl/start-server :bind host :port nport :handler cider-nrepl-handler)
     (println (str "researcher living image | gateway http://" host ":" port
                   "/mcp/{" (str/join "," (map name roles)) "} | nrepl " host ":" nport))
+    (try (index/sync-tasks! cfg) (catch Throwable _ nil))
     (start-loop!)
     (flush)
     (clojure.main/repl :prompt #(do (print "image=> ") (flush)))))

@@ -34,3 +34,12 @@
     (if (= 200 status)
       (get body "result")
       (throw (ex-info "qdrant search failed" {:status status :body body})))))
+
+(defn delete-by-filter!
+  "Delete all points matching a payload filter, e.g.
+   {:must [{:key \"kind\" :match {:value \"task\"}}]}."
+  [cfg filter]
+  (http/json-request {:method :post
+                      :url (str (base cfg) "/collections/" (coll cfg) "/points/delete")
+                      :headers (H cfg)
+                      :json {:filter filter}}))
