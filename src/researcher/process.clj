@@ -70,10 +70,12 @@
        "  A concept title is the canonical SHORT noun you would [[link]] — never a definition or a "
        "dash/colon clause.\n\n"
        "DEDUP FIRST: (recall <concept> 8) finds existing cards AND open tasks (both indexed); "
-       "(open-tasks) lists the queue. If a concept already has a card or task, do NOT duplicate — skip "
-       "it, or (enrich-task! N \"new quotes / a new angle from this source\") to add this source's "
-       "context to the existing task. Call each tool once per real item — no trial calls. If the page "
-       "carries nothing researchable, write no card and file nothing. Then stop."))
+       "(open-tasks) lists the queue. If an OPEN TASK already covers the concept, don't duplicate — "
+       "(enrich-task! N \"new quotes / a new angle from this source\"). If a CARD already exists, skip "
+       "it UNLESS this source materially corrects or extends it — then file the task anyway (a later "
+       "research amends the card; say in the rationale what is new). Call each tool once per real item "
+       "— no trial calls. If the page carries nothing researchable, write no card and file nothing. "
+       "Then stop."))
 
 ;; ---------------------------------------------------------------------------
 ;; INVESTIGATE — inquiry + syntopical reading + STORM/PRISMA + Toulmin,
@@ -95,10 +97,12 @@
        "the claim to established theory: does prior art AGREE, is there TENSION, or is it a "
        "MISREADING? Ground it in sources. Cite Andy's note as a [[link]] to its reference "
        "card (dangling until READ makes it), not a bare URL. One bridge, short.\n"
-       "- CONCEPT -> a lean HUB anchor: a SHORT encyclopedic definition (a few sentences, "
-       "exactly ONE idea, objective, your own words, NO Andy). Its real value is the "
-       "backlinks the platform renders — do NOT hand-list connections, do NOT write a "
-       "kilometre article; depth is other cards.\n\n"
+       "- CONCEPT -> a lean HUB anchor: a SHORT encyclopedic definition (a few sentences, exactly "
+       "ONE idea, objective, in YOUR OWN words, NO Andy), RESEARCHED from authoritative sources — "
+       "NOT transcribed from the task or Andy's framing. The task's Context/Quotes/Angle only ORIENT "
+       "you (what to research and the facet that matters); the card's substance comes from the "
+       "literature. Its value is the backlinks the platform renders — do NOT hand-list connections or "
+       "write a kilometre article; depth is other cards.\n\n"
        "CARD CONTRACT (the standing rules — obey exactly):\n"
        "- Atomic: ONE idea per card, self-contained, written as if to publish.\n"
        "- [[wikilinks]] point ONLY to other cards in THIS wiki. A [[link]] to a card that "
@@ -114,16 +118,18 @@
        ":type :question :title \"…\" :rationale \"… quoting the seed/sources\" :goals [\"…\" "
        "\"…\"] :seed_note \"<url>\"}).\n\n"
        "PROCEDURE:\n"
-       "1. (recall <subject> 8) — existing cards + related corpus; neither duplicate nor "
-       "contradict. If the seed names cards that reference it, read how they use it and fit "
-       "your card to them.\n"
+       "1. (recall <subject> 8) — existing cards + related corpus; neither duplicate nor contradict. "
+       "If the concept card ALREADY EXISTS, read it and IMPROVE it (correct, tighten, fold in a "
+       "newly-relevant source), preserving what is sound — a later research legitimately amends an "
+       "earlier card. If the seed names cards that reference it, fit your card to them.\n"
        "2. LITERATURE — (search)+(fetch) at least 2 authoritative sources (prefer primary); "
        "appraise; cite what the card asserts.\n"
        "3. DRAFT -> (check-zettel {:type <:concept|:answer|:connection> :title \"…\" :body "
        "\"…\"}); revise until OK (usually: shorten, move depth into [[links]]/seeds, fix "
        "links).\n"
-       "4. WRITE with put-answer! / put-connection! / put-concept!. If put-concept! returns "
-       "{:skipped}, the canonical card already exists — you are done.\n"
+       "4. WRITE with put-answer! / put-connection! / put-concept! (it OVERWRITES an existing card — "
+       "the PR shows the diff for review). If it returns {:rejected}, the body is too long — shorten "
+       "and push depth into [[links]].\n"
        "5. Leave [[links]] for sub-topics; file new question seeds. Then stop."))
 
 ;; ---------------------------------------------------------------------------
