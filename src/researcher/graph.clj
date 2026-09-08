@@ -56,3 +56,29 @@
   "Pages nothing links to."
   [g]
   (filterv #(zero? (in-degree g %)) (keys (:nodes g))))
+
+(def content-types
+  "Card types that carry knowledge (vs meta: skills, conventions, the index).
+   Only these participate in the research frontier."
+  #{"concept" "connection" "answer" "reference"})
+
+(defn- content-node? [p]
+  (contains? content-types (some-> (:type p) name)))
+
+(defn dangling
+  "[[wikilink]] targets with no card yet, ranked by how many CONTENT cards want
+   one. Each: {:title target :refs n :referrers [page-titles]}. A dangling link is
+   the wiki's own research request - a card someone linked to that does not exist -
+   so this list IS the lazy-dereference frontier: to research the wiki, materialize
+   the most-wanted missing card, one at a time. Links from meta cards
+   (skills/conventions) are ignored - their [[wikilinks]] are prose examples."
+  [g]
+  (let [have (set (keys (:nodes g)))]
+    (->> (vals (:nodes g))
+         (filter content-node?)
+         (mapcat (fn [p] (map (fn [t] [t (:title p)]) (:links p))))
+         (remove (fn [[t _]] (contains? have t)))
+         (group-by first)
+         (map (fn [[t pairs]] {:title t :refs (count pairs)
+                               :referrers (vec (sort (map second pairs)))}))
+         (sort-by (juxt (comp - :refs) :title)))))

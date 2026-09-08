@@ -26,3 +26,11 @@
       (is (= #{"A" "B"} (set (keys (:nodes gg)))))
       (is (= #{"B"} (:links (get-in gg [:nodes "A"]))) "parses [[wikilinks]]")
       (is (= ["https://s1"] (:sources (get-in gg [:nodes "A"]))) "parses cited urls"))))
+
+(deftest dangling-frontier
+  (let [g {:nodes {"A" {:title "A" :type "concept" :links #{"B" "X"}}
+                   "B" {:title "B" :type "concept" :links #{"X" "Y"}}}}]
+    (is (= [{:title "X" :refs 2 :referrers ["A" "B"]}
+            {:title "Y" :refs 1 :referrers ["B"]}]
+           (graph/dangling g))
+        "links with no card, most-wanted first; existing target B excluded")))
