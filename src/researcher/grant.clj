@@ -44,7 +44,7 @@
          (prompt/skill-ref cfg role) "\n"
          "- Conventions: " (conventions-url cfg) "\n\n"
          "`op: " (name (or (:op task) :create))
-         " · type: " (name (or (:type task) :concept)) "`")))
+         " · type: " (name (or (:type task) :seed)) "`")))
 
 (defn- propose-task-fn [cfg child]
   (fn [task]
@@ -54,18 +54,18 @@
           cap   (get-in cfg [:planner :wip-cap])]
       (cond
         (< (count rationale) 20)
-        {:refused (str "task needs a substantive :rationale — why the concept matters, with the "
+        {:refused (str "seed needs a substantive :rationale — why this is worth researching, with the "
                        "note's words quoted inline (>=20 chars); a bare title is not fileable")}
         (empty? goals)
-        {:refused (str "task needs :goals — 2-4 concrete research questions that pin the subject and "
-                       "what the card must establish about it")}
+        {:refused (str "seed needs :goals — 2-4 concrete research questions that pin the subject and "
+                       "what a good result must establish")}
         (>= open cap)
         {:refused (str "queue full: " open "/" cap " open issues — triage first")}
         :else
         (let [role  (keyword (or (:role task) child))
               issue (gh/create-issue cfg {:title (:title task)
                                           :body (task-issue-body cfg (assoc task :role role))
-                                          :labels [(str "type:" (name (or (:type task) :concept)))
+                                          :labels [(str "type:" (name (or (:type task) :seed)))
                                                    (str "role:" (name role))]})]
           (when-let [p (projects/find-project cfg)]
             (projects/add-to-backlog! cfg (get p "id") (get issue "node_id")))

@@ -122,14 +122,25 @@
               (reset! warned true))
             (loop []
               (when (and @orchestrator (< (count @active) 1))
-                (when-let [issue (try (runner/next-todo cfg @active) (catch Throwable _ nil))]
-                  (swap! active conj (:number issue))
-                  (println "orchestrator: running #" (:number issue) "(" (name (runner/role-of issue)) ")")
-                  (future
-                    (try (runner/run-issue cfg issue)
-                         (catch Throwable t (println "orchestrator error #" (:number issue) ":" (.getMessage t)))
-                         (finally (swap! active disj (:number issue)))))
-                  (recur))))
+                (if-let [issue (try (runner/next-todo cfg @active) (catch Throwable _ nil))]
+                  (do
+                    (swap! active conj (:number issue))
+                    (println "orchestrator: running #" (:number issue) "(" (name (runner/role-of issue)) ")")
+                    (future
+                      (try (runner/run-issue cfg issue)
+                           (catch Throwable t (println "orchestrator error #" (:number issue) ":" (.getMessage t)))
+                           (finally (swap! active disj (:number issue)))))
+                    (recur))
+                  ;; no approved Todo -> autonomously dereference ONE dangling [[link]]:
+                  ;; the wiki's own frontier, most-wanted missing card first, one PR each.
+                  (when-let [seed (try (runner/next-dangling cfg @active) (catch Throwable _ nil))]
+                    (swap! active conj (:card seed))
+                    (println "orchestrator: dereferencing [[" (:card seed) "]] requested by" (:refs seed))
+                    (future
+                      (try (runner/run-issue cfg seed)
+                           (catch Throwable t (println "orchestrator deref error [[" (:card seed) "]]:" (.getMessage t)))
+                           (finally (swap! active disj (:card seed)))))
+                    (recur)))))
             (Thread/sleep (get-in cfg [:orchestrator :poll-ms] 15000))))))
     :started))
 

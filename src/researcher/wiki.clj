@@ -112,6 +112,14 @@
         "push" "--force" (str "git@github.com:" (get-in cfg [:github :repo]) ".git")
         (str branch ":" branch)))
 
+(defn remote-branch?
+  "True if `branch` exists on the public remote - used to skip a dangling link that
+   is already being worked (its card branch is open). Token-less: repo is public."
+  [cfg branch]
+  (let [remote (str "https://github.com/" (get-in cfg [:github :repo]) ".git")
+        r (sh "git" "ls-remote" "--heads" remote branch)]
+    (boolean (seq (str/trim (str (:out r)))))))
+
 (defn page-titles
   "Slugs of existing wiki cards (recursively under content/) — dedup context."
   [repo]

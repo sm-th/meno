@@ -11,6 +11,7 @@
             [researcher.github :as gh]
             [researcher.projects :as projects]
             [researcher.budget :as budget]
+            [researcher.graph :as graph]
             [researcher.git :as git]
             [researcher.note :as note]
             [clojure.java.shell :refer [sh]]
@@ -52,7 +53,8 @@
       :research))
 
 (defn issue-block [issue]
-  (str "ISSUE #" (:number issue) "\nTITLE: " (:title issue) "\n\n" (:body issue)))
+  (str (when-let [n (:number issue)] (str "ISSUE #" n "\n"))
+       "TITLE: " (:title issue) "\n\n" (:body issue)))
 
 (defn- trunc [s n]
   (let [s (str s)] (if (> (count s) n) (str (subs s 0 n) " …[+" (- (count s) n) "]") s)))
@@ -88,17 +90,24 @@
 
 (defn- pr-body [issue]
   ;; Rich PR description mined from the eval trace: the cards this branch adds and
-  ;; the follow-up tasks it filed, plus the task it closes.
+  ;; the follow-up tasks it filed. Closes its issue, or - for a dangling-link deref
+  ;; (no issue) - names the cards that requested the now-materialized one.
   (let [t     (str/join "\n" (map :result @task/trace))
         cards (map (fn [[_ p ti]] (str "- `" p "` — " ti))
                    (re-seq #":path \"([^\"]*)\"[^}]*?:title \"([^\"]*)\"" t))
         filed (distinct (map (fn [[_ n ti]] (str "- #" n " " ti))
-                             (re-seq #":filed (\d+),?\s*:title \"([^\"]*)\"" t)))]
-    (str "Closes #" (:number issue) "\n\n"
+                             (re-seq #":filed (\d+),?\s*:title \"([^\"]*)\"" t)))
+        num   (:number issue)]
+    (str (if num
+           (str "Closes #" num "\n\n")
+           (str "Materializes the missing card **[[" (:card issue) "]]**, requested by: "
+                (str/join ", " (:refs issue)) ".\n\n"))
          "Auto-drafted by the `research` skill for **" (:title issue) "**.\n\n"
          (when (seq cards) (str "### Cards\n" (str/join "\n" cards) "\n\n"))
          (when (seq filed) (str "### Follow-up tasks filed\n" (str/join "\n" filed) "\n\n"))
-         "Review the card(s) in the diff below; merging accepts them and closes the issue.")))
+         (if num
+           "Review the card(s) in the diff below; merging accepts them and closes the issue."
+           "Review the card(s) in the diff below; merging adds them to the wiki."))))
 
 (defn- run-comment [role issue {:keys [status out result]}]
   (let [b (budget/snapshot)]
@@ -161,6 +170,45 @@
                         (catch Throwable _ nil)))))
          vec)))
 
+(defn- link-context
+  "Up to two lines from `path` that mention [[title]] - shows the researcher how an
+   existing card uses the missing link, so the new card fits its callers."
+  [path title]
+  (->> (str/split-lines (slurp path))
+       (filter #(str/includes? % (str "[[" title)))
+       (take 2)
+       (mapv str/trim)))
+
+(defn- seed-body [title referrers ctx]
+  (str "A card is MISSING. Existing cards link to [[" title "]] but no such card exists yet.\n\n"
+       "Materialize it: research **" title "** and write that ONE card (plus the links inside it). "
+       "Do NOT write other cards in this run — every [[link]] you leave becomes its own future card. "
+       "File genuinely new open questions as separate seeds.\n\n"
+       "Referenced by: " (str/join ", " referrers) "\n\n"
+       (when (seq ctx) (str "How they use it:\n" (str/join "\n" (map #(str "- " %) ctx))))))
+
+(defn next-dangling
+  "Top actionable dangling link as a numberless research seed, or nil. Reads the
+   frontier from a fresh origin/base tree; skips links already being worked (their
+   `card/<slug>` branch exists on the remote) or in `exclude` (by card title)."
+  [cfg exclude]
+  (let [base   (get-in cfg [:wiki :base] "main")
+        wc     (wiki/prepare-branch! cfg base)
+        g      (graph/load-graph (assoc-in cfg [:wiki :root] wc))
+        prefix (get-in cfg [:worker :card-branch-prefix] "researcher/card/")
+        ex     (set exclude)
+        cand   (->> (graph/dangling g)
+                    (remove #(or (contains? ex (:title %))
+                                 (wiki/remote-branch? cfg (str prefix (wiki/slugify (:title %)))))))]
+    (when-let [d (first cand)]
+      (let [title (:title d)
+            paths (keep #(get-in g [:nodes % :path]) (:referrers d))
+            ctx   (mapcat #(link-context % title) paths)]
+        {:title title :card title :role :research
+         :branch (str prefix (wiki/slugify title))
+         :refs (:referrers d)
+         :body (seed-body title (:referrers d) ctx)}))))
+
 (defn- fenced-md
   "Wrap text in a ```md fence long enough to survive any backtick run inside it,
    so the embedded note never bleeds into the surrounding task instructions."
@@ -215,8 +263,9 @@
         system  (str prompt/base "\n\n---\n\n" (load-meta cfg role))
         num     (:number issue)
         base    (get-in cfg [:wiki :base] "main")
-        branch  (when writes? (str (get-in cfg [:worker :branch-prefix] "researcher/issue-")
-                                   (or num (System/currentTimeMillis))))
+        branch  (when writes? (or (:branch issue)
+                                  (str (get-in cfg [:worker :branch-prefix] "researcher/issue-")
+                                       (or num (System/currentTimeMillis)))))
         repo    (when writes? (wiki/prepare-branch! cfg branch))
         tmp     (str (System/getProperty "java.io.tmpdir")
                      "researcher-" (name role) "-" (or num "seed") "-" (System/currentTimeMillis))
