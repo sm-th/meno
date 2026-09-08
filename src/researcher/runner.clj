@@ -206,33 +206,81 @@
 (defn- msg-text [content]
   (->> content (keep #(when (= "text" (get % "type")) (get % "text"))) (str/join "\n")))
 
+(defn- fmt-int [n]
+  (str/replace (str (long (or n 0))) #"\B(?=(\d{3})+(?!\d))" ","))
+
+(defn- fmt-dur [ms]
+  (let [s (quot (long (or ms 0)) 1000)]
+    (if (>= s 60) (format "%dm %02ds" (quot s 60) (mod s 60)) (str s "s"))))
+
+(defn- strip-tool [nm] (str/replace (str nm) #"^mcp__[^_]+_" ""))
+
+(defn- run-stats
+  "Totals for the omp research session, summed from its --mode=json transcript:
+   cost + tokens (per-message usage is additive) + tool-call count."
+  [jsonl]
+  (let [as  (->> (str/split-lines (str jsonl))
+                 (keep #(try (json/read-str %) (catch Exception _ nil)))
+                 (filter #(and (= "message_end" (get % "type"))
+                               (= "assistant" (get-in % ["message" "role"]))))
+                 (map #(get % "message")))
+        sum (fn [k] (reduce + 0 (keep #(get-in % ["usage" k]) as)))]
+    {:cost  (reduce + 0.0 (keep #(get-in % ["usage" "cost" "total"]) as))
+     :in    (sum "input") :out (sum "output")
+     :cache-read (sum "cacheRead") :cache-write (sum "cacheWrite")
+     :calls (reduce + 0 (for [m as] (count (filter #(= "toolCall" (get % "type")) (get m "content")))))}))
+
 (defn- post-transcript!
-  "Post the omp --mode=json transcript to the issue: ONE comment per step — assistant
-   thinking, assistant prose, each tool call (code block) and each tool result (output
-   block). Max-debug view; throttled to dodge GitHub's secondary rate limit."
+  "Post the omp --mode=json transcript: ONE comment per step — assistant thinking,
+   assistant prose, and each tool CALL paired with its RESULT in a SINGLE comment
+   (code block + output block). Throttled to dodge GitHub's secondary rate limit."
   [cfg num jsonl]
-  (let [put! (fn [body] (try (gh/comment-issue! cfg num body) (Thread/sleep 300)
-                             (catch Throwable _ nil)))]
-    (doseq [ev (->> (str/split-lines (str jsonl))
-                    (keep #(try (json/read-str %) (catch Exception _ nil)))
-                    (filter #(= "message_end" (get % "type"))))
-            :let [m (get ev "message") role (get m "role")]]
-      (cond
-        (= role "assistant")
-        (doseq [c (get m "content")]
-          (case (get c "type")
-            "thinking" (let [t (str/trim (str (or (get c "thinking") (get c "text"))))]
-                         (when (seq t) (put! (str "### 🧠 thinking\n\n" t))))
-            "text"     (let [t (str/trim (str (get c "text")))]
-                         (when (seq t) (put! (str "### 💬 assistant\n\n" t))))
-            "toolCall" (put! (str "### 🔧 " (get c "name")
-                                  (when-let [i (get c "intent")] (str " — _" i "_")) "\n\n"
-                                  (code-fence "clojure" (get-in c ["arguments" "code"]
-                                                                (json/write-str (get c "arguments"))))))
-            nil))
-        (= role "toolResult")
-        (put! (str "### " (if (get m "isError") "❌ error" "✅ result") "\n\n"
-                   (code-fence "" (msg-text (get m "content")))))))))
+  (let [msgs    (->> (str/split-lines (str jsonl))
+                     (keep #(try (json/read-str %) (catch Exception _ nil)))
+                     (filter #(= "message_end" (get % "type")))
+                     (map #(get % "message")))
+        results (into {} (for [m msgs :when (= "toolResult" (get m "role"))]
+                           [(get m "toolCallId")
+                            {:text (msg-text (get m "content")) :error? (get m "isError")}]))
+        put!    (fn [body] (try (gh/comment-issue! cfg num body) (Thread/sleep 300)
+                                (catch Throwable _ nil)))]
+    (doseq [m msgs :when (= "assistant" (get m "role"))
+            c (get m "content")]
+      (case (get c "type")
+        "thinking" (let [t (str/trim (str (or (get c "thinking") (get c "text"))))]
+                     (when (seq t) (put! (str "### 🧠 thinking\n\n" t))))
+        "text"     (let [t (str/trim (str (get c "text")))]
+                     (when (seq t) (put! (str "### 💬 assistant\n\n" t))))
+        "toolCall" (let [code (get-in c ["arguments" "code"] (json/write-str (get c "arguments")))
+                         {:keys [text error?]} (get results (get c "id"))]
+                     (put! (str "### 🔧 " (strip-tool (get c "name"))
+                                (when-let [i (get c "intent")] (str " — _" i "_")) "\n\n"
+                                (code-fence "clojure" code)
+                                "\n\n" (if error? "❌ **error**" "✅ **result**") "\n\n"
+                                (code-fence "" (or text "")))))
+        nil))))
+
+(defn- post-stats!
+  "Final run-stats comment: model, wall time, the research session's cost/tokens (from the
+   omp transcript) and the image-side embed/llm cost (from the budget meter)."
+  [cfg num model dur-ms jsonl]
+  (let [st (run-stats jsonl)
+        b  (budget/snapshot)
+        eu (get-in b [:embed :usd] 0.0)
+        lu (get-in b [:llm :usd] 0.0)]
+    (try (gh/comment-issue! cfg num
+           (str "### 📊 run stats\n\n"
+                "- model: `" model "`\n"
+                "- time: " (fmt-dur dur-ms) "\n"
+                "- research session: " (format "$%.4f" (:cost st)) " · "
+                (fmt-int (:in st)) " in · " (fmt-int (:out st)) " out · "
+                (fmt-int (:cache-read st)) " cache-read · " (fmt-int (:cache-write st))
+                " cache-write · " (:calls st) " tool calls\n"
+                "- image side: embed " (fmt-int (get-in b [:embed :tokens])) " tok / "
+                (format "$%.5f" eu) " · llm " (fmt-int (get-in b [:llm :tokens])) " tok / "
+                (format "$%.5f" lu) "\n"
+                "- **total: " (format "$%.4f" (+ (:cost st) eu lu)) "**"))
+         (catch Throwable _ nil))))
 
 (defn run-issue
   "Run one issue under its role: load the role meta as the system prompt, spawn
@@ -267,11 +315,13 @@
                        (str "▶️ **" (:stage spec) "** started · model `"
                             (or (:model spec) (get-in cfg [:omp :model])) "`"))
                      (catch Throwable _ nil)))
-      (let [{:keys [exit out err]}
+      (let [t0  (System/currentTimeMillis)
+            {:keys [exit out err]}
             (sh "omp" "-p" "--no-tools" "--no-session" "--no-title"
                 "--mode=json" "--print-thoughts"
                 "--model" (or (:model spec) (get-in cfg [:omp :model])) "--cwd" tmp
                 "--system-prompt" system "--" prompt)
+            dur (- (System/currentTimeMillis) t0)
             _ (do (println "=== omp" (name role) "exit" exit "===")
                   (when (seq err) (println "--- stderr ---\n" err)))
             _ (when num (post-transcript! cfg num out))
@@ -298,6 +348,7 @@
                        (:no-write result) "ⓘ nothing written (no card changed)"
                        :else              "✅ done"))
                (catch Throwable _ nil)))
+        (when num (post-stats! cfg num (or (:model spec) (get-in cfg [:omp :model])) dur out))
         (when (and num (:item-id issue) (not writes?) (nil? (:error result)))
           (try (projects/set-status! cfg (get (projects/find-project cfg) "id") (:item-id issue)
                                      (get-in cfg [:projects :done-status] "Done"))
