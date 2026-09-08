@@ -247,7 +247,7 @@
       (try
         (let [{:keys [exit out err]}
               (sh "omp" "-p" "--no-tools" "--no-session" "--no-title"
-                  "--model" (get-in cfg [:omp :model]) "--cwd" tmp
+                  "--model" (or (:model (process/spec role)) (get-in cfg [:omp :model])) "--cwd" tmp
                   "--system-prompt" system "--" prompt)
               _ (do (println "=== omp" (name role) "exit" exit "===") (println out)
                     (when (seq err) (println "--- stderr ---\n" err)))

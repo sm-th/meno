@@ -90,8 +90,8 @@
        "strongly / under what conditions it holds) + known rebuttals. Objective; no Andy.\n"
        "- CLAIM (a thesis, usually Andy's) -> CONNECTION card. By syntopical reading, bridge "
        "the claim to established theory: does prior art AGREE, is there TENSION, or is it a "
-       "MISREADING? Ground it in sources. Name Andy and cite his note as a plain Markdown "
-       "URL (NEVER a [[wikilink]]). One bridge, short.\n"
+       "MISREADING? Ground it in sources. Cite Andy's note as a [[link]] to its reference "
+       "card (dangling until READ makes it), not a bare URL. One bridge, short.\n"
        "- CONCEPT -> a lean HUB anchor: a SHORT encyclopedic definition (a few sentences, "
        "exactly ONE idea, objective, your own words, NO Andy). Its real value is the "
        "backlinks the platform renders — do NOT hand-list connections, do NOT write a "
@@ -101,8 +101,9 @@
        "- [[wikilinks]] point ONLY to other cards in THIS wiki. A [[link]] to a card that "
        "does not exist yet is NOT an error — it is the research frontier, materialised later "
        "as its own card.\n"
-       "- Andy's blog notes live on another site: cite them as plain Markdown URLs, NEVER "
-       "[[wikilinked]].\n"
+       "- Link to CARDS. Every source (Andy's post, a paper) is or becomes a `reference` card — "
+       "cite it as a [[wikilink]] (dangling until READ makes it); its URL lives in that card. A "
+       "bare Markdown URL (under ## Sources) is only for an external source with no card.\n"
        "- Non-obvious claims cite a source, listed under ## Sources.\n\n"
        "FRONTIER (integrate + iterate) — the depth lives OUTSIDE this card:\n"
        "- Leave a [[wikilink]] for every sub-topic/concept your card leans on.\n"
@@ -142,12 +143,12 @@
        "no Andy, no blog.\n"
        "- connection — DIFFERENT, do NOT ask it to remove Andy: its whole purpose is to "
        "bridge Andy's SPECIFIC claim in a blog note to established theory / a wiki concept "
-       "(agreement, tension, or misreading). It SHOULD name Andy and cite his note — but as "
-       "a plain Markdown URL link, NEVER a [[wikilink]]. Keep it short and about ONE "
+       "(agreement, tension, or misreading). It SHOULD name Andy and cite his note as a [[link]] "
+       "to its reference card (dangling ok), not a bare URL. Keep it short and about ONE "
        "bridge.\n\n"
        "Universal rules (all types):\n"
-       "- [[wikilinks]] point ONLY to other wiki cards; a blog note is a plain Markdown URL "
-       "link, never [[wikilinked]].\n"
+       "- [[wikilinks]] link to CARDS, including a source's reference card (dangling ok); a bare "
+       "Markdown URL is only for an external source with no card.\n"
        "- Non-obvious claims cite a source. No kilometre-long cards; no multi-section "
        "articles.\n\n"
        "Reply with EITHER a single line `OK`, OR a short bulleted list of concrete fixes. "
@@ -165,6 +166,7 @@
     :writes?  true
     :creates  :research
     :tools    ["recall" "open-tasks" "enrich-task!" "propose-task!" "put-reference!"]
+    :model    "opencode-go/deepseek-v4-pro"
     :system   read-system}
 
    :research
@@ -175,6 +177,7 @@
     :tools    ["recall" "search" "fetch" "central" "reference-frequency" "open-tasks"
                "check-zettel" "put-concept!" "put-connection!" "put-answer!"
                "put-reference!" "propose-task!"]
+    :model    "opencode-go/deepseek-v4-pro"
     :system   investigate-system}})
 
 (defn roles [] (keys stages))
