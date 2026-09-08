@@ -13,7 +13,8 @@
             [researcher.github :as gh]
             [researcher.projects :as projects]
             [researcher.wiki :as wiki]
-            [researcher.prompt :as prompt]
+            [researcher.process :as process]
+            [researcher.task :as task]
             [clojure.java.shell :refer [sh]]))
 
 (defn- hit->clj [h]
@@ -41,8 +42,7 @@
                 (str/join "\n" (map #(str "- [ ] " %) goals)) "\n"))
          "\n## References\n\n"
          (when (seq seed) (str "- Seed: " seed "\n"))
-         (prompt/skill-ref cfg role) "\n"
-         "- Conventions: " (conventions-url cfg) "\n\n"
+         (process/practice-ref role) "\n\n"
          "`op: " (name (or (:op task) :create))
          " · type: " (name (or (:type task) :seed)) "`")))
 
@@ -94,8 +94,9 @@
      :dry?      true -> propose-task!/enrich-task! are no-ops (bench)."
   [cfg {:keys [role wiki-repo branch dry? creates] :or {role :research}}]
   (let [role  (keyword role)
+        dry?  (or dry? @task/dry)
         w     (when (and wiki-repo branch) (wiki/writer cfg wiki-repo branch))
-        child (or creates (get-in cfg [:roles role :creates]) "research")
+        child (or creates (:creates (process/spec role)) :research)
         registry
         {"recall"  (fn ([q] (mapv hit->clj (index/recall cfg q 8)))
                      ([q k] (mapv hit->clj (index/recall cfg q k))))
@@ -106,7 +107,13 @@
          "open-tasks" (fn [] (mapv (fn [i] {:number (get i "number") :title (get i "title")})
                                    (gh/open-issues cfg)))
          "propose-task!" (if dry?
-                           (fn [task] {:filed :dry :title (:title task)})
+                           (fn [task]
+                             (println (str "\n===== DRY propose-task! =====\nTITLE: " (:title task)
+                                           "\nLABELS: type:" (name (or (:type task) :seed)) " role:" (name child)
+                                           "\n----- BODY -----\n" (task-issue-body cfg (assoc task :role child))
+                                           "\n=============================="))
+                             (flush)
+                             {:filed :dry :title (:title task)})
                            (propose-task-fn cfg child))
          "enrich-task!" (if dry?
                           (fn [n _] {:enriched :dry :number n})
@@ -137,9 +144,9 @@
                                           (:title card) "\n\nBODY:\n" (str (:body card)))
                                    r (sh "omp" "-p" "--no-tools" "--no-session" "--no-title"
                                          "--model" (get-in cfg [:omp :model])
-                                         "--system-prompt" prompt/zettel-critic "--" p)]
+                                         "--system-prompt" process/zettel-critic "--" p)]
                                (str/trim (str (:out r)))))}
-        wanted (get-in cfg [:roles role :tools])
+        wanted (:tools (process/spec role))
         chosen (if (seq wanted) wanted (keys registry))
         granted (vec (for [t chosen :when (get registry t)] t))
         ns-map (into {'context (fn [] {:model (get-in cfg [:omp :model]) :role (name role) :branch branch})

@@ -9,16 +9,16 @@
 (def cfg {:github {:repo "agent-smith-wiki/smith-wiki"}
           :wiki   {:base "main" :conventions "conventions"}})
 
-(deftest task-body-links-conventions-not-inlined
-  ;; The global card contract lives in the wiki Conventions card; the task links
-  ;; it and never inlines it, even if the planner model supplies :acceptance.
+(deftest task-body-references-stage-not-inlines-contract
+  ;; The card contract lives in the PROCESS (the INVESTIGATE prompt in code), NOT in
+  ;; the issue body: the body names the stage/practice that will handle the seed and
+  ;; never inlines the contract, even if the model supplies :acceptance.
   (let [s (body cfg {:rationale "R" :type :concept :seed_note "u"
                      :acceptance ["encyclopedic and objective" "atomic"]})]
     (is (not (str/includes? s "Acceptance")))
     (is (not (str/includes? s "encyclopedic")))
     (is (str/includes? s "## Why this matters"))
-    (is (str/includes? s "- Conventions:"))
-    (is (str/includes? s "/blob/main/content/conventions.md"))
+    (is (str/includes? s "- Stage: INVESTIGATE"))
     (is (str/includes? s "R"))
     (is (str/includes? s "- Seed: u"))
     (is (str/includes? s "type: concept"))))

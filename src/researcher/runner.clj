@@ -6,7 +6,7 @@
    and open a PR; others just act through their tools (e.g. propose-task!). Roles
    are DATA (config :roles + a meta card) — adding one needs no code."
   (:require [researcher.task :as task]
-            [researcher.prompt :as prompt]
+            [researcher.process :as process]
             [researcher.wiki :as wiki]
             [researcher.github :as gh]
             [researcher.projects :as projects]
@@ -32,15 +32,6 @@
       (if end (str/triml (subs after (+ end 4))) s))
     s))
 
-(defn load-meta
-  "The role's system prompt, read live from the wiki (content/<meta>.md);
-   YAML frontmatter (if any) is stripped so only the prompt body is sent."
-  [cfg role]
-  (let [rel (get-in cfg [:roles (keyword role) :meta] (str "meta/" (name role)))
-        f   (java.io.File. (str (get-in cfg [:wiki :root]) "/content/" rel ".md"))]
-    (if (.exists f)
-      (strip-frontmatter (slurp f))
-      (throw (ex-info "missing role meta card" {:role role :path (.getPath f)})))))
 
 (defn role-of
   "Role of an issue from its `role:<name>` label; falls back to :role, then :research."
@@ -219,14 +210,16 @@
 
 (defn- ingest-body [cfg n url]
   (str "## Objective\n\n"
-       "Ingest this newly published note: extract the established concepts it leans on "
-       "and file a `research` task for each. If it carries no established concepts, file nothing.\n\n"
+       "READ this newly published note (Adler analytical reading): come to terms with its "
+       "CONCEPTS, its CLAIMS (what it asserts), and the open QUESTIONS it leaves — and file "
+       "one research seed per unit worth researching. A pure status update / link dump -> "
+       "file nothing.\n\n"
        "## Definition of Done\n\n"
-       "- [ ] Note read; canonical concepts identified (vs Andy's own coinage) — or judged as none\n"
-       "- [ ] One `role:research` task filed per canonical concept not already carded or queued (deduped)\n"
-       "- [ ] Nothing filed if the note carries no established concepts\n\n"
+       "- [ ] Note read; concepts / claims / open questions identified — or judged as none\n"
+       "- [ ] One seed filed per unit (typed :concept|:claim|:question), deduped against cards + open tasks\n"
+       "- [ ] Nothing filed if the note carries nothing researchable\n\n"
        "## References\n\n"
-       (prompt/skill-ref cfg :ingest) "\n"
+       (process/practice-ref :ingest) "\n"
        "- Seed: " url "\n\n"
        "## Note\n\n"
        "**[" (:title n) "](" url ")**\n\n" (fenced-md (:body n))))
@@ -258,9 +251,9 @@
    :number/:item-id) or a bodied task with no :number. Returns a result map."
   [cfg issue]
   (let [role    (role-of issue)
-        spec    (get-in cfg [:roles role])
+        spec    (process/spec role)
         writes? (boolean (:writes? spec))
-        system  (str prompt/base "\n\n---\n\n" (load-meta cfg role))
+        system  (process/system-prompt role)
         num     (:number issue)
         base    (get-in cfg [:wiki :base] "main")
         branch  (when writes? (or (:branch issue)

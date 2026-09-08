@@ -51,17 +51,8 @@
  ;; living image so the /mcp/worker endpoint is branch-scoped via researcher.task.
  :worker {:branch-prefix "researcher/issue-"}
 
- ;; Roles = data. Each issue is tagged `role:<name>`; the runner loads that role's
- ;; system prompt from the wiki (content/<meta>.md) and grants exactly its tools.
- ;; Add a role = a meta card + an entry here, no code. :writes? -> per-issue wiki
- ;; branch + PR. :creates -> default role of tasks this role files (propose-task!).
- :roles
- {:ingest   {:meta "meta/skill/ingest"   :writes? false :creates "research"
-             :tools ["recall" "central" "reference-frequency" "open-tasks" "enrich-task!" "propose-task!"]}
-  :research {:meta "meta/skill/research" :writes? true  :creates "research"
-             :tools ["recall" "search" "fetch" "central" "reference-frequency"
-                     "open-tasks" "put-concept!" "put-connection!" "put-answer!" "put-reference!" "check-zettel"
-                     "propose-task!"]}}
+ ;; The RESEARCH PROCESS — stages, prompts, tools, the card contract — lives in CODE:
+ ;; researcher.process (the swappable zeno layer). No :roles here; no external skill cards.
 
  ;; GitHub issues = the task queue (planner files, you triage, worker executes).
  :github {:repo "agent-smith-wiki/smith-wiki" :token-env "GH_TOKEN"}

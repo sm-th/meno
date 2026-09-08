@@ -14,7 +14,8 @@
             [researcher.config :as config]
             [researcher.grant :as grant]
             [researcher.runner :as runner]
-            [researcher.task :as task])
+            [researcher.task :as task]
+            [researcher.process :as process])
   (:import (com.sun.net.httpserver HttpServer HttpHandler HttpExchange)
            (java.net InetSocketAddress))
   (:gen-class))
@@ -66,7 +67,7 @@
         (let [req  (json/read-str (slurp (.getRequestBody ex)))
               ;; live: rebuild the grant from current config+code each request.
               ;; task/current carries the running issue's branch (writes roles).
-              world (assoc (or @task/current {}) :role role)
+              world (assoc (or @task/current {}) :role role :dry? @task/dry)
               ctx   (grant/build (config/load-config) world)
               resp  (handle-rpc ctx req)]
           (if resp
@@ -81,6 +82,13 @@
   "Per new article (call when a post is published): deterministically file a
    `role:ingest` task into Backlog. No LLM — just enqueues for your triage."
   [] (runner/file-ingest-task! (config/load-config)))
+
+(defn dry!
+  "Global preview switch: (dry! true) makes every side-effecting tool PRINT what it
+   would do (full issue title+body for propose-task!) instead of touching GitHub/the
+   wiki, so a whole stage runs through the REAL pipeline and is watched on screen.
+   (dry! false) turns it off."
+  [on?] (reset! task/dry (boolean on?)) {:dry @task/dry})
 
 (defn run!
   "Execute the next approved (Todo) task of ANY role (or a specific issue number)
@@ -151,7 +159,7 @@
         host  (get-in cfg [:gateway :host] "127.0.0.1")
         port  (get-in cfg [:gateway :port] 7777)
         nport (get-in cfg [:gateway :nrepl-port] 7778)
-        roles (keys (:roles cfg))
+        roles (process/roles)
         srv   (HttpServer/create (InetSocketAddress. ^String host (int port)) 0)]
     (doseq [role roles]
       (.createContext srv (str "/mcp/" (name role)) (handler role)))

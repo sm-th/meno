@@ -11,3 +11,9 @@
 (def current
   "nil, or {:profile :worker :wiki-repo <clone-path> :branch <str> :issue <n>}."
   (atom nil))
+
+(def dry
+  "Global preview switch. When true, side-effecting tools (propose-task!, ...) PRINT
+   what they would do instead of touching GitHub/the wiki — so a whole stage can be
+   run through the REAL pipeline and watched on screen. Set via (researcher.mcp/dry!)."
+  (atom false))
