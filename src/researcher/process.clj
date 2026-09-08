@@ -117,11 +117,13 @@
        "cite it as a [[wikilink]] (dangling until READ makes it); its URL lives in that card. A "
        "bare Markdown URL (under ## Sources) is only for an external source with no card.\n"
        "- Non-obvious claims cite a source, listed under ## Sources.\n\n"
-       "FRONTIER (integrate + iterate) — the depth lives OUTSIDE this card:\n"
-       "- Leave a [[wikilink]] for every sub-topic/concept your card leans on.\n"
-       "- File genuinely NEW open questions as new seeds: (propose-task! {:op :create "
-       ":type :question :title \"…\" :rationale \"… quoting the seed/sources\" :goals [\"…\" "
-       "\"…\"] :seed_note \"<url>\"}).\n\n"
+       "FRONTIER — the depth lives OUTSIDE this card:\n"
+       "- Leave a [[Canonical name|short form]] link for every related concept your card leans on "
+       "(dangling is fine — it becomes the frontier).\n"
+       "- File a task ONLY for a genuinely NEW CONCEPT that has no card or open task yet "
+       "(propose-task! {:op :create :type :concept :title \"<canonical name>\" :rationale \"why it "
+       "deserves its own card, quoting the source\" :seed_note \"<url>\"}). NEVER file claims or "
+       "questions as tasks — this wiki's tasks are concepts only.\n\n"
        "PROCEDURE:\n"
        "1. (recall <subject> 8) — existing cards + related corpus; neither duplicate nor contradict. "
        "If the concept card ALREADY EXISTS, read it and IMPROVE it (correct, tighten, fold in a "
@@ -135,7 +137,7 @@
        "4. WRITE with put-answer! / put-connection! / put-concept! (it OVERWRITES an existing card — "
        "the PR shows the diff for review). If it returns {:rejected}, the body is too long — shorten "
        "and push depth into [[links]].\n"
-       "5. Leave [[links]] for sub-topics; file new question seeds. Then stop."))
+       "5. Leave [[Canonical|short]] links for related concepts; file a task only for a genuinely new CONCEPT (never a question or claim). Then stop."))
 
 ;; ---------------------------------------------------------------------------
 ;; check-zettel rubric — a recursive omp Zettelkasten editor over a draft card
