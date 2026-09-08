@@ -62,7 +62,7 @@
         (>= open cap)
         {:refused (str "queue full: " open "/" cap " open issues — triage first")}
         :else
-        (let [role  (keyword (or (:role task) child))
+        (let [role  (keyword child)   ; target role = the stage's :creates; ignore a stray task :role (models confuse it with :type)
               issue (gh/create-issue cfg {:title (:title task)
                                           :body (task-issue-body cfg (assoc task :role role))
                                           :labels [(str "type:" (name (or (:type task) :seed)))
