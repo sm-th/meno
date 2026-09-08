@@ -132,7 +132,8 @@
          "put-concept!" (when w
                           (fn [page]
                             (if dry?
-                              (do (println (str "\n===== DRY put-concept! =====\n"
+                              (do (println (str "\n===== DRY put-concept! -> "
+                                                (wiki/card-rel :concept (wiki/slugify (:title page))) " =====\n"
                                                 (wiki/render (assoc page :type :concept))
                                                 "\n==============================")) (flush)
                                   {:dry :concept :title (:title page)})
@@ -148,9 +149,9 @@
                                                                " — a concept card is a SHORT definition; cut it and move the depth into separate question tasks")}
                                   :else
                                   (wiki/put-page! w (assoc page :type :concept)))))))
-         "put-connection!" (when w (fn [page] (if dry? (do (println (str "\n===== DRY put-connection! =====\n" (wiki/render (assoc page :type :connection)) "\n==============================")) (flush) {:dry :connection :title (:title page)}) (wiki/put-page! w (assoc page :type :connection)))))
-         "put-answer!"     (when w (fn [page] (if dry? (do (println (str "\n===== DRY put-answer! =====\n" (wiki/render (assoc page :type :answer)) "\n==============================")) (flush) {:dry :answer :title (:title page)}) (wiki/put-page! w (assoc page :type :answer)))))
-         "put-reference!"  (when w (fn [page] (if dry? (do (println (str "\n===== DRY put-reference! =====\n" (wiki/render (assoc page :type :reference)) "\n==============================")) (flush) {:dry :reference :title (:title page)}) (wiki/put-page! w (assoc page :type :reference)))))
+         "put-connection!" (when w (fn [page] (if dry? (do (println (str "\n===== DRY put-connection! -> " (wiki/card-rel :connection (wiki/slugify (:title page))) " =====\n" (wiki/render (assoc page :type :connection)) "\n==============================")) (flush) {:dry :connection :title (:title page)}) (wiki/put-page! w (assoc page :type :connection)))))
+         "put-answer!"     (when w (fn [page] (if dry? (do (println (str "\n===== DRY put-answer! -> " (wiki/card-rel :answer (wiki/slugify (:title page))) " =====\n" (wiki/render (assoc page :type :answer)) "\n==============================")) (flush) {:dry :answer :title (:title page)}) (wiki/put-page! w (assoc page :type :answer)))))
+         "put-reference!"  (when w (fn [page] (if dry? (do (println (str "\n===== DRY put-reference! -> " (wiki/card-rel :reference (wiki/slugify (:title page))) " =====\n" (wiki/render (assoc page :type :reference)) "\n==============================")) (flush) {:dry :reference :title (:title page)}) (wiki/put-page! w (assoc page :type :reference)))))
          "check-zettel"    (fn [card]
                              (let [p (str "Proposed " (name (or (:type card) :concept)) " card.\n\nTITLE: "
                                           (:title card) "\n\nBODY:\n" (str (:body card)))
