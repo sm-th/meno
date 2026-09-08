@@ -21,8 +21,8 @@
 
 ;; A one-line gloss per role so a task issue is self-explanatory to a human reader.
 (def skill-gloss
-  {"ingest"   "extract the note's established concepts and file a research task for each"
-   "research" "write the concept card (cited, wikilinked) and open a PR"})
+  {"ingest"   "surface the note's claims and open questions and file a research seed for each"
+   "research" "research this seed into one cited, cross-linked card and open a PR"})
 
 (defn skill-url
   "Link to a role's skill page in the wiki (content/meta/skill/<role>.md)."
