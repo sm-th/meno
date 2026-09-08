@@ -197,6 +197,43 @@
        (projects/add-to-backlog! cfg (get p "id") (get issue "node_id")))
      {:filed (get issue "number") :title (str "Ingest: " title) :role :ingest})))
 
+(defn- code-fence [lang s]
+  (let [s (str s)
+        longest (->> (re-seq #"`+" s) (map count) (reduce max 0))
+        f (apply str (repeat (max 3 (inc longest)) \`))]
+    (str f lang "\n" s "\n" f)))
+
+(defn- msg-text [content]
+  (->> content (keep #(when (= "text" (get % "type")) (get % "text"))) (str/join "\n")))
+
+(defn- post-transcript!
+  "Post the omp --mode=json transcript to the issue: ONE comment per step — assistant
+   thinking, assistant prose, each tool call (code block) and each tool result (output
+   block). Max-debug view; throttled to dodge GitHub's secondary rate limit."
+  [cfg num jsonl]
+  (let [put! (fn [body] (try (gh/comment-issue! cfg num body) (Thread/sleep 300)
+                             (catch Throwable _ nil)))]
+    (doseq [ev (->> (str/split-lines (str jsonl))
+                    (keep #(try (json/read-str %) (catch Exception _ nil)))
+                    (filter #(= "message_end" (get % "type"))))
+            :let [m (get ev "message") role (get m "role")]]
+      (cond
+        (= role "assistant")
+        (doseq [c (get m "content")]
+          (case (get c "type")
+            "thinking" (let [t (str/trim (str (or (get c "thinking") (get c "text"))))]
+                         (when (seq t) (put! (str "### 🧠 thinking\n\n" t))))
+            "text"     (let [t (str/trim (str (get c "text")))]
+                         (when (seq t) (put! (str "### 💬 assistant\n\n" t))))
+            "toolCall" (put! (str "### 🔧 " (get c "name")
+                                  (when-let [i (get c "intent")] (str " — _" i "_")) "\n\n"
+                                  (code-fence "clojure" (get-in c ["arguments" "code"]
+                                                                (json/write-str (get c "arguments"))))))
+            nil))
+        (= role "toolResult")
+        (put! (str "### " (if (get m "isError") "❌ error" "✅ result") "\n\n"
+                   (code-fence "" (msg-text (get m "content")))))))))
+
 (defn run-issue
   "Run one issue under its role: load the role meta as the system prompt, spawn
    omp against /mcp/<role>, and — for :writes? roles — push a per-issue branch and
@@ -225,49 +262,45 @@
       (try (projects/set-status! cfg (get (projects/find-project cfg) "id") (:item-id issue)
                                  (get-in cfg [:projects :in-progress-status] "In Progress"))
            (catch Throwable _ nil)))
-    (let [cid     (when num
-                    (try (get (gh/comment-issue! cfg num (run-comment role issue {:status :running})) "id")
-                         (catch Throwable _ nil)))
-          running (atom true)
-          _upd    (when cid
-                    (future (while @running
-                              (Thread/sleep 6000)
-                              (when @running
-                                (try (gh/update-comment! cfg cid (run-comment role issue {:status :running}))
-                                     (catch Throwable _ nil))))))]
-      (try
-        (let [{:keys [exit out err]}
-              (sh "omp" "-p" "--no-tools" "--no-session" "--no-title"
-                  "--model" (or (:model (process/spec role)) (get-in cfg [:omp :model])) "--cwd" tmp
-                  "--system-prompt" system "--" prompt)
-              _ (do (println "=== omp" (name role) "exit" exit "===") (println out)
-                    (when (seq err) (println "--- stderr ---\n" err)))
-              result (cond
-                       (and writes? (wiki/ahead? repo base branch))
-                       (try
-                         (wiki/push-branch! cfg repo branch)
-                         (let [pr (gh/create-pr! cfg {:title (:title issue)
-                                                      :head  branch :base base
-                                                      :body  (pr-body issue)})]
-                           (when (:item-id issue)
-                             (try (projects/set-status! cfg (get (projects/find-project cfg) "id") (:item-id issue)
-                                                        (get-in cfg [:projects :review-status] "In Review"))
-                                  (catch Throwable _ nil)))
-                           {:issue num :branch branch :pr (get pr "html_url")})
-                         (catch Throwable e {:issue num :branch branch :error (.getMessage e)}))
-                       writes? {:issue num :no-write true}
-                       :else   {:issue num :done true})]
-          (reset! running false)
-          (when _upd (try (deref _upd 8000 nil) (catch Throwable _ nil)))
-          (budget/report)
-          (when cid
-            (try (gh/update-comment! cfg cid (run-comment role issue {:status :done :out out :result result}))
-                 (catch Throwable e (println "final comment failed:" (.getMessage e)))))
-          (when (and num (:item-id issue) (not writes?) (nil? (:error result)))
-            ;; non-writing roles (ingest) produce their output as new tasks; move the
-            ;; issue to Done (NOT closed) so the human reviews the result and closes it.
-            (try (projects/set-status! cfg (get (projects/find-project cfg) "id") (:item-id issue)
-                                       (get-in cfg [:projects :done-status] "Done"))
-                 (catch Throwable _ nil)))
-          result)
-        (finally (reset! running false) (reset! task/current nil))))))
+    (try
+      (when num (try (gh/comment-issue! cfg num
+                       (str "▶️ **" (:stage spec) "** started · model `"
+                            (or (:model spec) (get-in cfg [:omp :model])) "`"))
+                     (catch Throwable _ nil)))
+      (let [{:keys [exit out err]}
+            (sh "omp" "-p" "--no-tools" "--no-session" "--no-title"
+                "--mode=json" "--print-thoughts"
+                "--model" (or (:model spec) (get-in cfg [:omp :model])) "--cwd" tmp
+                "--system-prompt" system "--" prompt)
+            _ (do (println "=== omp" (name role) "exit" exit "===")
+                  (when (seq err) (println "--- stderr ---\n" err)))
+            _ (when num (post-transcript! cfg num out))
+            result (cond
+                     (and writes? (wiki/ahead? repo base branch))
+                     (try
+                       (wiki/push-branch! cfg repo branch)
+                       (let [pr (gh/create-pr! cfg {:title (:title issue)
+                                                    :head  branch :base base
+                                                    :body  (pr-body issue)})]
+                         (when (:item-id issue)
+                           (try (projects/set-status! cfg (get (projects/find-project cfg) "id") (:item-id issue)
+                                                      (get-in cfg [:projects :review-status] "Done"))
+                                (catch Throwable _ nil)))
+                         {:issue num :branch branch :pr (get pr "html_url")})
+                       (catch Throwable e {:issue num :branch branch :error (.getMessage e)}))
+                     writes? {:issue num :no-write true}
+                     :else   {:issue num :done true})]
+        (budget/report)
+        (when num
+          (try (gh/comment-issue! cfg num
+                 (cond (:pr result)       (str "✅ done · PR " (:pr result))
+                       (:error result)    (str "❌ push/PR failed: " (:error result))
+                       (:no-write result) "ⓘ nothing written (no card changed)"
+                       :else              "✅ done"))
+               (catch Throwable _ nil)))
+        (when (and num (:item-id issue) (not writes?) (nil? (:error result)))
+          (try (projects/set-status! cfg (get (projects/find-project cfg) "id") (:item-id issue)
+                                     (get-in cfg [:projects :done-status] "Done"))
+               (catch Throwable _ nil)))
+        result)
+      (finally (reset! task/current nil)))))
