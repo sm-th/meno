@@ -3,7 +3,7 @@
    runner loads that role's system prompt from the wiki (content/<meta>.md) and
    spawns ONE omp session whose only tool is `eval` (the role's grant, served by
    the living image at /mcp/<role>). Roles that :write get a per-issue wiki branch
-   and open a PR; others just act through their tools (e.g. propose-task!). Roles
+   and open a PR; others just act through their tools (e.g. propose-concept!). Roles
    are DATA (config :roles + a meta card) — adding one needs no code."
   (:require [researcher.task :as task]
             [researcher.process :as process]

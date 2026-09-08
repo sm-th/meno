@@ -46,8 +46,7 @@
        "Your input is a task naming a SOURCE — a URL, and maybe a short line of context (why it was "
        "added / what to look for). FIRST `(fetch <url>)` to pull the page text, then read it "
        "analytically.\n\n"
-       "You produce TWO things: ONE reference card (the literature note), and a research task per key "
-       "CONCEPT. Do NOT file tasks for claims or questions — those live inside the reference card.\n\n"
+       "You produce a reference card (the literature note) AND file the frontier as follow-up tasks.\n\n"
        "STEP 1 — WRITE THE REFERENCE CARD (put-reference!):\n"
        "  (put-reference! {:title \"<source title>\" :author \"<author>\" :url \"<url>\" :date "
        "\"<date if known>\" :kind \"<blog|paper|article>\"\n"
@@ -56,29 +55,26 @@
        "       ## Key ideas — the main claims/arguments as tight bullets (quote sparingly);\n"
        "       ## Conclusions — the takeaways / what the source really argues for;\n"
        "       ## Open questions — what it leaves unresolved (only if any).\n"
-       "     Weave the KEY CONCEPTS as [[wikilinks]] whose TARGET is each concept's CANONICAL "
-       "established name; write [[Canonical name|short form]] to read naturally (e.g. [[Principle of "
-       "least privilege|least privilege]]). They are DANGLING (no card yet) and become the frontier. "
-       "Link another source by its [[reference card]], never a bare URL.>\"})\n\n"
-       "STEP 2 — FILE ONE RESEARCH TASK PER KEY CONCEPT (propose-task!), and NOTHING for claims or "
-       "questions:\n"
-       "  (propose-task! {:op :create :type :concept :title \"<the concept's CANONICAL established "
-       "name — 'Principle of least privilege', NOT 'Least privilege'; the tool files the issue titled "
-       "'Add concept: <it>'>\"\n"
-       "     :rationale \"CONTEXT: why the concept matters and how THIS source frames it\"\n"
-       "     :quotes [\"verbatim line(s) from the source mentioning it\"]\n"
-       "     :angle \"the specific facet worth a card, given this source\"\n"
-       "     :seed_note \"<source url>\"})\n"
-       "  A concept title is the concept's CANONICAL established name (what an encyclopedia titles "
-       "it), never an abbreviation, definition, or dash/colon clause; in prose link it [[Canonical "
-       "name|short form]].\n\n"
-       "DEDUP FIRST: (recall <concept> 8) finds existing cards AND open tasks (both indexed); "
-       "(open-tasks) lists the queue. If an OPEN TASK already covers the concept, don't duplicate — "
-       "(enrich-task! N \"new quotes / a new angle from this source\"). If a CARD already exists, skip "
-       "it UNLESS this source materially corrects or extends it — then file the task anyway (a later "
-       "research amends the card; say in the rationale what is new). Call each tool once per real item "
-       "— no trial calls. If the page carries nothing researchable, write no card and file nothing. "
-       "Then stop."))
+       "     Weave the KEY CONCEPTS as [[Canonical name|short form]] wikilinks (dangling = the "
+       "frontier); link another source by its [[reference card]], never a bare URL.>\"})\n\n"
+       "STEP 2 — FILE THE FRONTIER (dedup FIRST; call each tool once per real item):\n"
+       "- Every CONCEPT the note leans on that has NO card and NO open task -> leave the [[link]] AND "
+       "(propose-concept! {:title \"<CANONICAL established name — 'Principle of least privilege', not "
+       "'Least privilege'>\" :rationale \"why it matters + how THIS source frames it\" :quotes "
+       "[\"verbatim line(s)\"] :angle \"the facet worth a card\" :seed_note \"<source url>\"}). A "
+       "dangling [[link]] with no card and no task is an ORPHAN — file the concept so it can become a "
+       "card. Only a truly peripheral mention needs no task.\n"
+       "- Every OPEN QUESTION the source raises and leaves unresolved -> (propose-research! {:question "
+       "\"<the question in plain words>\" :rationale \"why it matters + how the source raises it\" "
+       ":angle \"...\" :seed_note \"<source url>\"}). A real research task (investigate, cite, write an "
+       "answer card) — file it honestly as research, NOT as a concept.\n"
+       "- Every OTHER SOURCE worth reading that the note leans on -> (propose-reference! {:url "
+       "\"<url>\" :context \"why it's worth ingesting / what to look for\"}).\n\n"
+       "DEDUP: (recall <x> 8) finds existing cards AND open tasks; (open-tasks) lists the queue. If an "
+       "open task already covers it, DON'T duplicate — (enrich-task! N \"the new quote / angle from "
+       "this source\") so mentions accumulate on ONE task. If a card exists, skip UNLESS this source "
+       "materially corrects/extends it. If the page carries nothing researchable, write no card and "
+       "file nothing. Then stop."))
 
 ;; ---------------------------------------------------------------------------
 ;; INVESTIGATE — inquiry + syntopical reading + STORM/PRISMA + Toulmin,
@@ -89,9 +85,10 @@
   (str "STAGE: INVESTIGATE.  PRACTICE: scientific inquiry + syntopical reading + "
        "STORM/PRISMA-style cited synthesis + Toulmin argument structure, recorded as a "
        "Zettelkasten permanent note.\n\n"
-       "Input is ONE seed. A CONCEPT task is titled `Add concept: X`; write the card titled X (the "
-       "canonical noun / [[link]] target). Produce ONE atomic card for it, plus the links inside it. "
-       "Keep the PR small: one page + its links, NEVER a pile of cards.\n\n"
+       "Input is ONE task. `Add concept: X` -> write the CONCEPT card titled X (the canonical noun / "
+       "[[link]] target). `Research: <question>` -> write an ANSWER card that investigates the "
+       "question. Produce ONE atomic card, plus the links inside it. Keep the PR small: one page + "
+       "its links, NEVER a pile of cards.\n\n"
        "The card, BY SEED TYPE:\n"
        "- QUESTION -> ANSWER card. Synthesise the literature into a claim that answers it, "
        "Toulmin-structured: the claim + its grounds (cited evidence) + a qualifier (how "
@@ -117,13 +114,17 @@
        "cite it as a [[wikilink]] (dangling until READ makes it); its URL lives in that card. A "
        "bare Markdown URL (under ## Sources) is only for an external source with no card.\n"
        "- Non-obvious claims cite a source, listed under ## Sources.\n\n"
-       "FRONTIER — the depth lives OUTSIDE this card:\n"
-       "- Leave a [[Canonical name|short form]] link for every related concept your card leans on "
-       "(dangling is fine — it becomes the frontier).\n"
-       "- File a task ONLY for a genuinely NEW CONCEPT that has no card or open task yet "
-       "(propose-task! {:op :create :type :concept :title \"<canonical name>\" :rationale \"why it "
-       "deserves its own card, quoting the source\" :seed_note \"<url>\"}). NEVER file claims or "
-       "questions as tasks — this wiki's tasks are concepts only.\n\n"
+       "FRONTIER — the depth lives OUTSIDE this card; file follow-ups (dedup first: recall + "
+       "open-tasks; enrich if a task exists):\n"
+       "- Every related CONCEPT your card leans on that has NO card and NO open task -> leave the "
+       "[[Canonical name|short form]] link AND (propose-concept! {:title \"<canonical name>\" "
+       ":rationale \"why it deserves a card, quoting the source\" :seed_note \"<url>\"}). A dangling "
+       "[[link]] with no card and no task is an ORPHAN; only a truly peripheral mention needs no "
+       "task.\n"
+       "- A genuinely NEW open question worth researching -> (propose-research! {:question \"...\" "
+       ":rationale \"why it matters\" :seed_note \"<url>\"}).\n"
+       "- A strong SOURCE you found and want ingested -> (propose-reference! {:url \"...\" :context "
+       "\"what it offers\"}).\n\n"
        "PROCEDURE:\n"
        "1. (recall <subject> 8) — existing cards + related corpus; neither duplicate nor contradict. "
        "If the concept card ALREADY EXISTS, read it and IMPROVE it (correct, tighten, fold in a "
@@ -137,7 +138,9 @@
        "4. WRITE with put-answer! / put-connection! / put-concept! (it OVERWRITES an existing card — "
        "the PR shows the diff for review). If it returns {:rejected}, the body is too long — shorten "
        "and push depth into [[links]].\n"
-       "5. Leave [[Canonical|short]] links for related concepts; file a task only for a genuinely new CONCEPT (never a question or claim). Then stop."))
+       "5. File frontier follow-ups: propose-concept! for every leaned-on concept with no card/task "
+       "(so no [[link]] is orphaned), propose-research! for new questions, propose-reference! for "
+       "strong sources. Then stop."))
 
 ;; ---------------------------------------------------------------------------
 ;; check-zettel rubric — a recursive omp Zettelkasten editor over a draft card
@@ -172,7 +175,7 @@
 
 ;; ---------------------------------------------------------------------------
 ;; stages — the process as DATA. role key -> stage spec. Add/replace a stage
-;; here (no engine change). :creates = default role of seeds this stage files.
+;; here (no engine change). Planning tools (propose-*!) each target their own role.
 ;; ---------------------------------------------------------------------------
 
 (def stages
@@ -180,8 +183,7 @@
    {:stage    "READ"
     :practice "Adler analytical reading + Zettelkasten literature note"
     :writes?  true
-    :creates  :research
-    :tools    ["recall" "fetch" "open-tasks" "enrich-task!" "propose-task!" "put-reference!"]
+    :tools    ["recall" "fetch" "open-tasks" "enrich-task!" "propose-concept!" "propose-research!" "propose-reference!" "put-reference!"]
     :model    "opencode-go/deepseek-v4-pro"
     :system   read-system}
 
@@ -189,10 +191,9 @@
    {:stage    "INVESTIGATE"
     :practice "scientific inquiry + syntopical reading + STORM/PRISMA + Toulmin + Zettelkasten permanent note"
     :writes?  true
-    :creates  :research
     :tools    ["recall" "search" "fetch" "central" "reference-frequency" "open-tasks"
-               "check-zettel" "put-concept!" "put-connection!" "put-answer!"
-               "put-reference!" "propose-task!"]
+               "check-zettel" "put-concept!" "put-connection!" "put-answer!" "put-reference!"
+               "propose-concept!" "propose-research!" "propose-reference!"]
     :model    "opencode-go/deepseek-v4-pro"
     :system   investigate-system}})
 

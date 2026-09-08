@@ -27,50 +27,72 @@
        "/blob/" (get-in cfg [:wiki :base] "main")
        "/content/" (get-in cfg [:wiki :conventions] "conventions") ".md"))
 
-(defn- task-issue-body [cfg task]
-  ;; A concept research task carries only what is SPECIFIC to this source: the CONTEXT
-  ;; (why/how it frames the concept), verbatim QUOTES, and the ANGLE. HOW to write the
-  ;; card (its structure/contract) lives in the stage prompt in code, not here. URL(s)
-  ;; accrue in References as more sources touch the same concept (enrich-task!).
-  (let [rationale (str/trim (str (or (:rationale task) (:why task))))
-        quotes    (->> (:quotes task) (map #(str/trim (str %))) (remove str/blank?))
-        angle     (str/trim (str (:angle task)))
-        seed      (str/trim (str (:seed_note task)))
-        role      (keyword (or (:role task) :research))]
-    (str "## Context\n\n" rationale "\n"
-         (when (seq quotes)
-           (str "\n## From the source\n\n" (str/join "\n" (map #(str "> " %) quotes)) "\n"))
-         (when-not (str/blank? angle) (str "\n## Angle\n\n" angle "\n"))
+(defn- concept-body
+  "Body for an `Add concept: X` task — only what is SPECIFIC to the source that
+   raised it: Context (why/how it frames the concept), verbatim Quotes, Angle.
+   HOW to write the card lives in the INVESTIGATE prompt, not here."
+  [{:keys [rationale why quotes angle seed_note]}]
+  (let [ctx (str/trim (str (or rationale why)))
+        qs  (->> quotes (map #(str/trim (str %))) (remove str/blank?))
+        ang (str/trim (str angle))
+        src (str/trim (str seed_note))]
+    (str "## Context\n\n" ctx "\n"
+         (when (seq qs)
+           (str "\n## From the source\n\n" (str/join "\n" (map #(str "> " %) qs)) "\n"))
+         (when-not (str/blank? ang) (str "\n## Angle\n\n" ang "\n"))
          "\n## References\n\n"
-         (when (seq seed) (str "- Source: " seed "\n"))
-         (process/practice-ref role) "\n\n"
-         "`op: " (name (or (:op task) :create))
-         " · type: " (name (or (:type task) :concept)) "`")))
+         (when-not (str/blank? src) (str "- Source: " src "\n"))
+         (process/practice-ref :research))))
 
-(defn- propose-task-fn [cfg child]
-  (fn [task]
-    (let [rationale (str/trim (str (or (:rationale task) (:why task))))
-          title (str "Add " (name (or (:type task) :concept)) ": " (str/trim (str (:title task))))
-          open  (count (gh/open-issues cfg))
-          cap   (get-in cfg [:planner :wip-cap])]
-      (cond
-        (< (count rationale) 20)
-        {:refused (str "task needs a substantive :rationale — the CONTEXT: why this is worth "
-                       "researching and how the source frames the concept, quoting inline (>=20 chars)")}
-        (>= open cap)
-        {:refused (str "queue full: " open "/" cap " open issues — triage first")}
-        :else
-        (let [role  (keyword child)   ; target role = stage's :creates; ignore a stray task :role
-              issue (gh/create-issue cfg {:title title
-                                          :body (task-issue-body cfg (assoc task :role role))
-                                          :labels [(str "type:" (name (or (:type task) :concept)))
-                                                   (str "role:" (name role))]})]
-          (when-let [p (projects/find-project cfg)]
-            (projects/add-to-backlog! cfg (get p "id") (get issue "node_id")))
-          (try (index/index-task! cfg {:number (get issue "number") :title title
-                                       :rationale rationale :url (get issue "html_url")})
-               (catch Throwable _ nil))
-          {:filed (get issue "number") :title title})))))
+(defn- research-body
+  "Body for a `Research: <question>` task — the open question to investigate:
+   Context (why it matters / how the source raises it), Angle, optional Goals."
+  [{:keys [rationale context why angle goals seed_note]}]
+  (let [ctx (str/trim (str (or rationale context why)))
+        ang (str/trim (str angle))
+        gs  (->> goals (map #(str/trim (str %))) (remove str/blank?))
+        src (str/trim (str seed_note))]
+    (str "## Context\n\n" ctx "\n"
+         (when-not (str/blank? ang) (str "\n## Angle\n\n" ang "\n"))
+         (when (seq gs) (str "\n## Goals\n\n" (str/join "\n" (map #(str "- " %) gs)) "\n"))
+         "\n## References\n\n"
+         (when-not (str/blank? src) (str "- Source: " src "\n"))
+         (process/practice-ref :research))))
+
+(defn- ref-body
+  "Body for an `Ingest: <url>` task — a source worth READ+ingest. Same Source/Context
+   shape as a hand-filed ingest task, plus the stage line."
+  [{:keys [url seed_note context rationale why]}]
+  (let [src (str/trim (str (or url seed_note)))
+        ctx (str/trim (str (or context rationale why)))]
+    (str "## Source\n\n" src "\n\n"
+         "## Context\n\n"
+         (if (str/blank? ctx) "_(none given — judge from the page itself)_" ctx) "\n\n"
+         (process/practice-ref :ingest))))
+
+(defn- file-task!
+  "Create ONE Backlog task (or, under dry?, print it). type/role set the labels;
+   index-text feeds the dedup embedding. Enforces the WIP cap live in code."
+  [cfg dry? {:keys [title type role body index-text]}]
+  (let [labels [(str "type:" (name type)) (str "role:" (name role))]]
+    (if dry?
+      (do (println (str "\n===== DRY " (name type) " task =====\nTITLE: " title
+                        "\nLABELS: " (str/join " " labels)
+                        "\n----- BODY -----\n" body
+                        "\n=============================="))
+          (flush)
+          {:filed :dry :title title})
+      (let [open (count (gh/open-issues cfg))
+            cap  (get-in cfg [:planner :wip-cap])]
+        (if (>= open cap)
+          {:refused (str "queue full: " open "/" cap " open issues — triage first")}
+          (let [issue (gh/create-issue cfg {:title title :body body :labels labels})]
+            (when-let [p (projects/find-project cfg)]
+              (projects/add-to-backlog! cfg (get p "id") (get issue "node_id")))
+            (try (index/index-task! cfg {:number (get issue "number") :title title
+                                         :rationale (str index-text) :url (get issue "html_url")})
+                 (catch Throwable _ nil))
+            {:filed (get issue "number") :title title}))))))
 
 (def ^:private tool-docs
   {"recall" "(recall q [k]) — semantic search across the corpus and existing cards"
@@ -79,7 +101,9 @@
    "central" "(central n) — the n most-linked pages in the wiki graph"
    "reference-frequency" "(reference-frequency) — most-cited source URLs"
    "open-tasks" "(open-tasks) — [{:number :title}] tasks already queued"
-   "propose-task!" "(propose-task! {:title :rationale :goals :seed_note :role}) — file a task"
+   "propose-concept!" "(propose-concept! {:title :rationale :quotes :angle :seed_note}) — file a task to write a concept card (title is the canonical name)"
+   "propose-research!" "(propose-research! {:question :rationale :angle :goals :seed_note}) — file a task to research an open question; INVESTIGATE writes a cited answer card"
+   "propose-reference!" "(propose-reference! {:url :context}) — file a task to READ+ingest a source into a reference card"
    "enrich-task!" "(enrich-task! n md) — append a note to an open task"
    "put-concept!" "(put-concept! {:title :description :tags :body :sources}) — write the canonical concept card"
    "put-connection!" "(put-connection! {:title :tags :body :seed :sources}) — write a connection card"
@@ -91,13 +115,11 @@
   "Build the SCI grant for a ROLE. world:
      :role      keyword/string — selects tools (cfg :roles) and labels context
      :wiki-repo :branch  enable write fns (branch-scoped)
-     :creates   default role of tasks filed via propose-task! (else role's :creates)
-     :dry?      true -> propose-task!/enrich-task! are no-ops (bench)."
-  [cfg {:keys [role wiki-repo branch dry? creates] :or {role :research}}]
+     :dry?      true -> the propose-*!/enrich-task! writers print instead (bench)."
+  [cfg {:keys [role wiki-repo branch dry?] :or {role :research}}]
   (let [role  (keyword role)
         dry?  (or dry? @task/dry)
         w     (when (and wiki-repo branch) (wiki/writer cfg wiki-repo branch))
-        child (or creates (:creates (process/spec role)) :research)
         registry
         {"recall"  (fn ([q] (mapv hit->clj (index/recall cfg q 8)))
                      ([q k] (mapv hit->clj (index/recall cfg q k))))
@@ -107,15 +129,34 @@
          "reference-frequency" (fn [] (graph/reference-frequency (graph/load-graph cfg)))
          "open-tasks" (fn [] (mapv (fn [i] {:number (get i "number") :title (get i "title")})
                                    (gh/open-issues cfg)))
-         "propose-task!" (if dry?
-                           (fn [task]
-                             (println (str "\n===== DRY propose-task! =====\nTITLE: Add " (name (or (:type task) :concept)) ": " (:title task)
-                                           "\nLABELS: type:" (name (or (:type task) :concept)) " role:" (name child)
-                                           "\n----- BODY -----\n" (task-issue-body cfg (assoc task :role child))
-                                           "\n=============================="))
-                             (flush)
-                             {:filed :dry :title (:title task)})
-                           (propose-task-fn cfg child))
+         "propose-concept!"
+         (fn [m]
+           (let [ctx (str/trim (str (or (:rationale m) (:why m))))]
+             (if (< (count ctx) 20)
+               {:refused (str "a concept task needs a substantive :rationale (>=20 chars): why this "
+                              "concept deserves a card and how the source frames it")}
+               (file-task! cfg dry? {:title (str "Add concept: " (str/trim (str (:title m))))
+                                     :type :concept :role :research
+                                     :body (concept-body m) :index-text ctx}))))
+         "propose-research!"
+         (fn [m]
+           (let [q   (str/trim (str (or (:question m) (:title m))))
+                 ctx (str/trim (str (or (:rationale m) (:context m) (:why m))))]
+             (if (or (str/blank? q) (< (count ctx) 20))
+               {:refused (str "a research task needs a :question and a substantive :rationale "
+                              "(>=20 chars): why it matters and how the source raises it")}
+               (file-task! cfg dry? {:title (str "Research: " q)
+                                     :type :research :role :research
+                                     :body (research-body m) :index-text (str q " " ctx)}))))
+         "propose-reference!"
+         (fn [m]
+           (let [url (str/trim (str (or (:url m) (:seed_note m))))]
+             (if (str/blank? url)
+               {:refused "a reference task needs a :url to ingest"}
+               (file-task! cfg dry? {:title (str "Ingest: " url)
+                                     :type :reference :role :ingest
+                                     :body (ref-body m)
+                                     :index-text (str url " " (or (:context m) (:rationale m)))}))))
          "enrich-task!" (if dry?
                           (fn [n _] {:enriched :dry :number n})
                           (fn [n add]

@@ -86,7 +86,7 @@
 
 (defn dry!
   "Global preview switch: (dry! true) makes every side-effecting tool PRINT what it
-   would do (full issue title+body for propose-task!) instead of touching GitHub/the
+   would do (full issue title+body for propose-concept!) instead of touching GitHub/the
    wiki, so a whole stage runs through the REAL pipeline and is watched on screen.
    (dry! false) turns it off."
   [on?] (reset! task/dry (boolean on?)) {:dry @task/dry})

@@ -3,43 +3,58 @@
             [researcher.grant]
             [clojure.string :as str]))
 
-;; task-issue-body is private: exercise its observable contract via the var.
-(def body #'researcher.grant/task-issue-body)
+;; The per-type task-body builders are private: exercise their observable
+;; contracts via the vars. HOW to write the card lives in the stage prompt in
+;; code — the body only carries Context/Source and names the stage.
+(def concept-body #'researcher.grant/concept-body)
+(def research-body #'researcher.grant/research-body)
+(def ref-body #'researcher.grant/ref-body)
 
-(def cfg {:github {:repo "agent-smith-wiki/smith-wiki"}
-          :wiki   {:base "main" :conventions "conventions"}})
-
-(deftest task-body-context-and-stage-not-contract
-  ;; The card contract/structure lives in the PROCESS (stage prompt in code), NOT the
-  ;; issue body: the body gives Context + names the stage/practice + Source, and never
-  ;; inlines the contract or a Definition of Done.
-  (let [s (body cfg {:rationale "R" :type :concept :seed_note "u"
-                     :acceptance ["encyclopedic and objective" "atomic"]})]
-    (is (not (str/includes? s "Acceptance")))
-    (is (not (str/includes? s "encyclopedic")))
-    (is (not (str/includes? s "## Definition of Done")))
+(deftest concept-body-context-quotes-angle-stage
+  (let [s (concept-body {:rationale "least privilege is the security boundary here"
+                         :quotes ["run in a sandbox" "least privilege first"]
+                         :angle "the security-boundary sense"
+                         :seed_note "https://x/y"})]
     (is (str/includes? s "## Context"))
-    (is (str/includes? s "- Stage: INVESTIGATE"))
-    (is (str/includes? s "R"))
-    (is (str/includes? s "- Source: u"))
-    (is (str/includes? s "type: concept"))))
-
-(deftest task-body-minimal
-  (let [s (body cfg {:rationale "Least privilege is invoked by the note" :seed_note "u"})]
-    (is (str/includes? s "Least privilege is invoked by the note"))
-    (is (str/includes? s "- Source: u"))))
-
-(deftest task-body-renders-quotes-and-angle
-  ;; A concept research task carries verbatim quotes (blockquoted) and an angle;
-  ;; the card's structure/DoD lives in the stage prompt, not the task. :why aliases :rationale.
-  (let [s (body cfg {:why "how the source frames it"
-                     :quotes ["run in a sandbox" "least privilege first"]
-                     :angle "the security-boundary sense"
-                     :seed_note "u" :type :concept})]
-    (is (str/includes? s "## Context"))
+    (is (str/includes? s "least privilege is the security boundary here"))
     (is (str/includes? s "## From the source"))
     (is (str/includes? s "> run in a sandbox"))
     (is (str/includes? s "## Angle"))
     (is (str/includes? s "the security-boundary sense"))
+    (is (str/includes? s "- Source: https://x/y"))
+    (is (str/includes? s "- Stage: INVESTIGATE"))
+    ;; the card contract / Definition of Done never leaks into the task body
     (is (not (str/includes? s "## Definition of Done")))
-    (is (str/includes? s "- Source: u"))))
+    (is (not (str/includes? s "Acceptance")))))
+
+(deftest concept-body-minimal-omits-empty-sections
+  (let [s (concept-body {:rationale "Least privilege is invoked by the note" :seed_note "u"})]
+    (is (str/includes? s "Least privilege is invoked by the note"))
+    (is (str/includes? s "- Source: u"))
+    (is (not (str/includes? s "## From the source")))
+    (is (not (str/includes? s "## Angle")))))
+
+(deftest research-body-renders-goals-and-stage
+  ;; A research task carries the question's Context + Angle + Goals; INVESTIGATE writes the answer card.
+  (let [s (research-body {:rationale "how to enforce least privilege when permissions are unknown"
+                          :angle "the autonomy tension"
+                          :goals ["survey approaches" "name the tradeoff"]
+                          :seed_note "https://x/y"})]
+    (is (str/includes? s "## Context"))
+    (is (str/includes? s "how to enforce least privilege when permissions are unknown"))
+    (is (str/includes? s "## Angle"))
+    (is (str/includes? s "## Goals"))
+    (is (str/includes? s "- survey approaches"))
+    (is (str/includes? s "- Source: https://x/y"))
+    (is (str/includes? s "- Stage: INVESTIGATE"))))
+
+(deftest ref-body-source-context-read-stage
+  ;; A reference task is a source to READ+ingest: Source + Context, naming the READ stage.
+  (let [s (ref-body {:url "https://x/z" :context "worth reading for the sandbox model"})]
+    (is (str/includes? s "## Source"))
+    (is (str/includes? s "https://x/z"))
+    (is (str/includes? s "## Context"))
+    (is (str/includes? s "worth reading for the sandbox model"))
+    (is (str/includes? s "- Stage: READ")))
+  (let [s (ref-body {:url "https://x/z"})]
+    (is (str/includes? s "_(none given"))))
