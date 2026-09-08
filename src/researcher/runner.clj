@@ -246,7 +246,7 @@
                        (and writes? (wiki/ahead? repo base branch))
                        (try
                          (wiki/push-branch! cfg repo branch)
-                         (let [pr (gh/create-pr! cfg {:title (str "wiki: " (:title issue))
+                         (let [pr (gh/create-pr! cfg {:title (:title issue)
                                                       :head  branch :base base
                                                       :body  (pr-body issue)})]
                            (when (:item-id issue)

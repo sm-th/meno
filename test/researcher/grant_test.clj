@@ -10,31 +10,36 @@
           :wiki   {:base "main" :conventions "conventions"}})
 
 (deftest task-body-references-stage-not-inlines-contract
-  ;; The card contract lives in the PROCESS (the INVESTIGATE prompt in code), NOT in
-  ;; the issue body: the body names the stage/practice that will handle the seed and
-  ;; never inlines the contract, even if the model supplies :acceptance.
+  ;; The card contract lives in the PROCESS (stage prompt in code), NOT the issue body:
+  ;; the body gives Context + names the stage/practice, never inlines the contract.
   (let [s (body cfg {:rationale "R" :type :concept :seed_note "u"
                      :acceptance ["encyclopedic and objective" "atomic"]})]
     (is (not (str/includes? s "Acceptance")))
     (is (not (str/includes? s "encyclopedic")))
-    (is (str/includes? s "## Why this matters"))
+    (is (str/includes? s "## Context"))
     (is (str/includes? s "- Stage: INVESTIGATE"))
     (is (str/includes? s "R"))
-    (is (str/includes? s "- Seed: u"))
+    (is (str/includes? s "- Source: u"))
     (is (str/includes? s "type: concept"))))
 
 (deftest task-body-minimal
   (let [s (body cfg {:rationale "Least privilege is invoked by the note" :seed_note "u"})]
     (is (str/includes? s "Least privilege is invoked by the note"))
-    (is (str/includes? s "- Seed: u"))))
-(deftest task-body-renders-goals-and-inline-quote
-  ;; Quotes are woven inline in the rationale (no separate block); research goals
-  ;; render as a checklist. :why is accepted as an alias for :rationale.
-  (let [s (body cfg {:why "Confining untrusted code; the note says \"run in a sandbox\""
+    (is (str/includes? s "- Source: u"))))
+
+(deftest task-body-renders-quotes-angle-goals
+  ;; A concept research task carries verbatim quotes (blockquoted), an angle, and a
+  ;; Definition of Done checklist. :why aliases :rationale.
+  (let [s (body cfg {:why "how the source frames it"
+                     :quotes ["run in a sandbox" "least privilege first"]
+                     :angle "the security-boundary sense"
                      :goals ["the canonical, vendor-neutral definition" "how it applies to agents"]
                      :seed_note "u" :type :concept})]
-    (is (str/includes? s "run in a sandbox"))
+    (is (str/includes? s "## Context"))
+    (is (str/includes? s "## From the source"))
+    (is (str/includes? s "> run in a sandbox"))
+    (is (str/includes? s "## Angle"))
+    (is (str/includes? s "the security-boundary sense"))
     (is (str/includes? s "## Definition of Done"))
     (is (str/includes? s "- [ ] the canonical, vendor-neutral definition"))
-    (is (not (str/includes? s "## From the note")))
-    (is (str/includes? s "- Seed: u"))))
+    (is (str/includes? s "- Source: u"))))

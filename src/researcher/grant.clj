@@ -28,23 +28,27 @@
        "/content/" (get-in cfg [:wiki :conventions] "conventions") ".md"))
 
 (defn- task-issue-body [cfg task]
-  ;; A task issue is a self-contained spec — for human triage AND the agent: why
-  ;; it matters (with the note's words quoted inline) and a Definition of Done: the
-  ;; concrete, checkable criteria (the :goals). The HOW lives in the role's skill;
-  ;; the standing card contract lives in the Conventions card (linked in References).
+  ;; A concept research task is a self-contained spec for human triage AND the agent:
+  ;; the CONTEXT (why/how a source frames the concept), verbatim QUOTES, the ANGLE to
+  ;; pursue, and a Definition of Done. URL(s) accrue in References as more sources touch
+  ;; the same concept (enrich-task!).
   (let [rationale (str/trim (str (or (:rationale task) (:why task))))
+        quotes    (->> (:quotes task) (map #(str/trim (str %))) (remove str/blank?))
+        angle     (str/trim (str (:angle task)))
         goals     (->> (:goals task) (map #(str/trim (str %))) (remove str/blank?))
         seed      (str/trim (str (:seed_note task)))
         role      (keyword (or (:role task) :research))]
-    (str "## Why this matters\n\n" rationale "\n"
+    (str "## Context\n\n" rationale "\n"
+         (when (seq quotes)
+           (str "\n## From the source\n\n" (str/join "\n" (map #(str "> " %) quotes)) "\n"))
+         (when-not (str/blank? angle) (str "\n## Angle\n\n" angle "\n"))
          (when (seq goals)
-           (str "\n## Definition of Done\n\n"
-                (str/join "\n" (map #(str "- [ ] " %) goals)) "\n"))
+           (str "\n## Definition of Done\n\n" (str/join "\n" (map #(str "- [ ] " %) goals)) "\n"))
          "\n## References\n\n"
-         (when (seq seed) (str "- Seed: " seed "\n"))
+         (when (seq seed) (str "- Source: " seed "\n"))
          (process/practice-ref role) "\n\n"
          "`op: " (name (or (:op task) :create))
-         " · type: " (name (or (:type task) :seed)) "`")))
+         " · type: " (name (or (:type task) :concept)) "`")))
 
 (defn- propose-task-fn [cfg child]
   (fn [task]
