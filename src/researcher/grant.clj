@@ -22,21 +22,6 @@
     {:score (get h "score") :kind (get p "kind") :title (get p "title")
      :number (get p "number") :url (get p "url") :source (get p "source")}))
 
-(defn- research-body
-  "Body for a `Research: <question>` task — the open question to investigate:
-   Context (why it matters / how the source raises it), Angle, optional Goals."
-  [{:keys [rationale context why angle goals seed_note]}]
-  (let [ctx (str/trim (str (or rationale context why)))
-        ang (str/trim (str angle))
-        gs  (->> (wiki/as-list goals) (map #(str/trim (str %))) (remove str/blank?))
-        src (str/trim (str seed_note))]
-    (str "## Context\n\n" ctx "\n"
-         (when-not (str/blank? ang) (str "\n## Angle\n\n" ang "\n"))
-         (when (seq gs) (str "\n## Goals\n\n" (str/join "\n" (map #(str "- " %) gs)) "\n"))
-         "\n## References\n\n"
-         (when-not (str/blank? src) (str "- Source: " src "\n"))
-         (process/practice-ref :research))))
-
 (defn- ref-body
   "Body for an `Ingest: <url>` task — a source worth READ+ingest. Same Source/Context
    shape as a hand-filed ingest task, plus the stage line."
@@ -79,12 +64,12 @@
    "central" "(central n) — the n most-linked pages in the wiki graph"
    "reference-frequency" "(reference-frequency) — most-cited source URLs"
    "open-tasks" "(open-tasks) — [{:number :title}] tasks already queued"
-   "propose-research!" "(propose-research! {:question :rationale :angle :goals :seed_note}) — file a task to research an open question; INVESTIGATE writes a cited answer card"
    "propose-reference!" "(propose-reference! {:url :context}) — file a task to READ+ingest a source into a reference card"
    "enrich-task!" "(enrich-task! n md) — append a note to an open task"
    "put-concept!" "(put-concept! {:title :description :tags :body :sources}) — write the canonical concept card"
    "put-connection!" "(put-connection! {:title :tags :body :seed :sources}) — write a connection card"
    "put-answer!" "(put-answer! {:title :tags :body :seed :sources}) — write an answer card: a claim answering a question, with cited grounds"
+   "put-research!" "(put-research! {:title :tags :body :sources}) — write the research report card: the full cycle (question, why it matters, survey, findings, open sub-questions); long, no length cap"
    "put-reference!" "(put-reference! {:title :url :author :date :kind :tags :body :sources}) — write a reference card; :url (required), :author, :date, :kind land in the frontmatter for later parsing"
    "check-zettel" "(check-zettel {:type :title :body}) — recursively run a Zettelkasten editor over a proposed card; returns OK or a list of fixes"})
 
@@ -106,16 +91,7 @@
          "reference-frequency" (fn [] (graph/reference-frequency (graph/load-graph cfg)))
          "open-tasks" (fn [] (mapv (fn [i] {:number (get i "number") :title (get i "title")})
                                    (gh/open-issues cfg)))
-         "propose-research!"
-         (fn [m]
-           (let [q   (str/trim (str (or (:question m) (:title m))))
-                 ctx (str/trim (str (or (:rationale m) (:context m) (:why m))))]
-             (if (or (str/blank? q) (< (count ctx) 20))
-               {:refused (str "a research task needs a :question and a substantive :rationale "
-                              "(>=20 chars): why it matters and how the source raises it")}
-               (file-task! cfg dry? {:title (str "Research: " q)
-                                     :type :research :role :research
-                                     :body (research-body m) :index-text (str q " " ctx)}))))
+         "put-research!"   (when w (fn [page] (if dry? (do (println (str "\n===== DRY put-research! -> " (wiki/card-rel :research (:title page)) " =====\n" (wiki/render (assoc page :type :research)) "\n==============================")) (flush) {:dry :research :title (:title page)}) (wiki/put-page! w (assoc page :type :research)))))
          "propose-reference!"
          (fn [m]
            (let [url (str/trim (str (or (:url m) (:seed_note m))))]

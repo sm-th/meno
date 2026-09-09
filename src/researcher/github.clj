@@ -62,6 +62,17 @@
       :else
       (throw (ex-info "github create-pr failed" {:status status :body body})))))
 
+(defn open-prs
+  "Open pull requests as raw maps (head.ref, number, title, ...)."
+  [cfg]
+  (let [{:keys [status body]}
+        (http/json-request {:method :get
+                            :url (str api "/repos/" (repo cfg) "/pulls?state=open&per_page=100")
+                            :headers (H cfg)})]
+    (if (= 200 status)
+      body
+      (throw (ex-info "github open-prs failed" {:status status :body body})))))
+
 (defn get-issue
   "Fetch a single issue (for its body/rationale/acceptance)."
   [cfg number]

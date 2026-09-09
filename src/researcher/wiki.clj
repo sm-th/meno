@@ -61,7 +61,7 @@
 
 (def section
   "Wiki subfolder per card type — keeps meta/concepts/references/connections apart."
-  {:concept "concepts" :reference "references" :connection "connections" :answer "answers" :meta "meta"})
+  {:concept "concepts" :reference "references" :connection "connections" :answer "answers" :research "research" :meta "meta"})
 
 (defn domain-of
   "Host of a URL as a filesystem-safe folder name: scheme/path/port/www stripped,

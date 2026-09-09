@@ -63,10 +63,9 @@
        "- Leave a [[Canonical name]] wikilink for every CONCEPT the note leans on (dangling is fine "
        "— it is the frontier). Do NOT file concept tasks: a periodic job promotes a concept to the "
        "queue once several cards link it.\n"
-       "- Every OPEN QUESTION the source raises and leaves unresolved -> (propose-research! {:question "
-       "\"<the question in plain words>\" :rationale \"why it matters + how the source raises it\" "
-       ":angle \"...\" :seed_note \"<source url>\"}). A real research task (investigate, cite, write an "
-       "answer card) — file it honestly as research, NOT as a concept.\n"
+       "- Leave every unresolved QUESTION the source raises in the reference card's `## Open "
+       "questions` section as a plain bullet (a periodic job curates the most interesting into a "
+       "research task). Do NOT file research tasks yourself.\n"
        "- Another SOURCE the note itself cites/links, worth reading in full -> (propose-reference! "
        "{:url \"<url>\" :context \"why it's worth a full literature note / what to look for\"}).\n\n"
        "DEDUP: (recall <x> 8) finds existing cards AND open tasks; (open-tasks) lists the queue. If an "
@@ -84,19 +83,10 @@
   (str "STAGE: INVESTIGATE.  PRACTICE: scientific inquiry + syntopical reading + "
        "STORM/PRISMA-style cited synthesis + Toulmin argument structure, recorded as a "
        "Zettelkasten permanent note.\n\n"
-       "Input is ONE task. `Add concept: X` -> write the CONCEPT card titled X (the canonical noun / "
-       "[[link]] target). `Research: <question>` -> write an ANSWER card that investigates the "
-       "question. Produce ONE atomic card, plus the links inside it. Keep the PR small: one page + "
-       "its links, NEVER a pile of cards.\n\n"
-       "The card, BY SEED TYPE:\n"
-       "- QUESTION -> ANSWER card. Synthesise the literature into a claim that answers it, "
-       "Toulmin-structured: the claim + its grounds (cited evidence) + a qualifier (how "
-       "strongly / under what conditions it holds) + known rebuttals. Objective; no Andy.\n"
-       "- CLAIM (a thesis, usually Andy's) -> CONNECTION card. By syntopical reading, bridge "
-       "the claim to established theory: does prior art AGREE, is there TENSION, or is it a "
-       "MISREADING? Ground it in sources. Cite Andy's note as a [[link]] to its reference "
-       "card (dangling until READ makes it), not a bare URL. One bridge, short.\n"
-       "- CONCEPT -> a lean HUB anchor: a SHORT encyclopedic definition (a few sentences, exactly "
+       "Input is ONE task: `Add concept: X` -> write the CONCEPT card titled X (the canonical noun / "
+       "[[link]] target). Produce ONE atomic card, plus the links inside it. Keep the PR small: one "
+       "page + its links, NEVER a pile of cards.\n\n"
+       "THE CARD — a lean HUB anchor: a SHORT encyclopedic definition (a few sentences, exactly "
        "ONE idea, objective, in YOUR OWN words, NO Andy), RESEARCHED from authoritative sources — NOT "
        "transcribed from the task or Andy's framing. TITLE the card by the concept's CANONICAL "
        "established name (what an encyclopedia would use — 'Principle of least privilege', not 'Least "
@@ -121,8 +111,9 @@
        "- Leave a [[Canonical name|short form]] wikilink for every related CONCEPT (dangling is the "
        "frontier). Do NOT file concept tasks — a periodic job queues a concept once several cards "
        "link it.\n"
-       "- A genuinely NEW open question worth researching -> (propose-research! {:question \"...\" "
-       ":rationale \"why it matters\" :seed_note \"<url>\"}).\n"
+       "- A genuinely NEW open question worth researching -> leave it as a plain bullet in a `## Open "
+       "questions` section of the card (a periodic job curates it into a research task). Do NOT file "
+       "research tasks yourself.\n"
        "- A source you FETCHED and READ and judged STRONG (foundational; deserves its own full "
        "reference card) -> (propose-reference! {:url \"...\" :context \"what you read and why it's "
        "worth a full literature note\"}). NEVER propose a URL you did not read.\n\n"
@@ -135,14 +126,14 @@
        "authoritative sources (prefer primary). A search snippet is not reading — you MUST fetch "
        "the page. Cite in ## Sources only URLs you fetched and read; a candidate you did not open "
        "is neither cited nor ingested.\n"
-       "3. DRAFT -> (check-zettel {:type <:concept|:answer|:connection> :title \"…\" :body "
+       "3. DRAFT -> (check-zettel {:type :concept :title \"…\" :body "
        "\"…\"}); revise until OK (usually: shorten, move depth into [[links]]/seeds, fix "
        "links).\n"
-       "4. WRITE with put-answer! / put-connection! / put-concept! (it OVERWRITES an existing card — "
+       "4. WRITE with put-concept! (it OVERWRITES an existing card — "
        "the PR shows the diff for review). If it returns {:rejected}, the body is too long — shorten "
        "and push depth into [[links]].\n"
        "5. Leave [[Canonical|short]] links for related concepts (a periodic job queues the recurring "
-       "ones); propose-research! for genuinely-new questions, propose-reference! for strong sources. "
+       "ones); propose-reference! for a strong source that deserves its own reference card. "
        "Then stop."))
 
 ;; ---------------------------------------------------------------------------
@@ -167,14 +158,60 @@
        "bridge Andy's SPECIFIC claim in a blog note to established theory / a wiki concept "
        "(agreement, tension, or misreading). It SHOULD name Andy and cite his note by its bare URL "
        "(a periodic job cards-and-relinks it), not a [[wikilink]]. Keep it short and about ONE "
-       "bridge.\n\n"
+       "bridge.\n"
+       "- research — the FULL research cycle: ## Question, ## Why it matters, ## Survey (syntopical; "
+       "every source a bare external URL; concepts as [[wikilinks]]), ## Findings (Toulmin: claim + "
+       "grounds + qualifier + rebuttals), ## Open sub-questions. Long by design; objective synthesis, "
+       "not a list of snippets; no padding.\n\n"
        "Universal rules (all types):\n"
        "- [[wikilinks]] are for CONCEPTS only (bare [[Concept]]); a SOURCE is cited by its bare "
        "external URL (a periodic job cards-and-relinks recurring URLs).\n"
-       "- Non-obvious claims cite a source. No kilometre-long cards; no multi-section "
-       "articles.\n\n"
+       "- Non-obvious claims cite a source. No kilometre-long cards and no multi-section articles "
+       "(EXCEPT a research report, which is long and multi-section by design).\n\n"
        "Reply with EITHER a single line `OK`, OR a short bulleted list of concrete fixes. "
        "No prose, no preamble."))
+
+;; ---------------------------------------------------------------------------
+;; RESEARCH — the full best-practice research cycle written as one long report
+;; ---------------------------------------------------------------------------
+
+(def research-system
+  (str "STAGE: RESEARCH.  PRACTICE: a full best-practice research cycle — precise question "
+       "framing, syntopical reading, STORM/PRISMA-style cited survey, Toulmin-structured findings — "
+       "recorded as ONE long-form research report card.\n\n"
+       "Input is ONE task: a research QUESTION. Produce ONE research card TITLED by the question "
+       "verbatim, in content/research/. Unlike a concept card (a short definition) or an answer card "
+       "(a single claim), this is the WHOLE cycle written up for a reader: why the question matters, "
+       "what the literature says, and what you conclude.\n\n"
+       "THE REPORT — (put-research! {:title \"<the question, verbatim>\" :tags [...] "
+       ":body \"<Markdown>\" :sources [<bare urls you fetched>]}), with these sections in order:\n"
+       "## Question — the question restated precisely, and its scope.\n"
+       "## Why it matters — the motivation: which wiki concepts it touches and why it is worth "
+       "researching now. Link those concepts as [[Canonical name]] wikilinks.\n"
+       "## Survey — a syntopical review: what each authoritative source argues, where they AGREE and "
+       "where there is TENSION. Cite every source as its bare external URL; weave concepts as "
+       "[[wikilinks]]. You MUST (fetch) and READ each source — a (search) snippet is not reading.\n"
+       "## Findings — your conclusion, Toulmin-structured: the claim + its grounds (cited evidence) + "
+       "a qualifier (how strongly / under what conditions it holds) + known rebuttals. Objective; "
+       "synthesise, do not just list.\n"
+       "## Open sub-questions — questions this research opened but did not close, as plain bullets (a "
+       "periodic job curates the most interesting into their own research tasks). NOT tasks.\n\n"
+       "CONTRACT:\n"
+       "- [[wikilinks]] point to CONCEPT cards only (bare [[Canonical name|short]]); a dangling link "
+       "is the frontier, materialised later. A SOURCE is ALWAYS a bare external URL, NEVER a "
+       "[[wikilink]].\n"
+       "- Cite ONLY sources you actually (fetch)ed and read.\n"
+       "- This card is LONG by design — no length cap — but every section earns its place; no "
+       "padding.\n\n"
+       "PROCEDURE:\n"
+       "1. (recall <question> 8) — existing cards + related corpus; build on them, never duplicate.\n"
+       "2. (central 12) and (reference-frequency) — orient on the wiki's core concepts and most-cited "
+       "sources.\n"
+       "3. LITERATURE — (search) finds candidates; (fetch) and READ at least 3 authoritative sources "
+       "(prefer primary). A snippet is not reading.\n"
+       "4. DRAFT -> (check-zettel {:type :research :title \"…\" :body \"…\"}); revise until OK.\n"
+       "5. WRITE with put-research!. Leave [[concept]] links for the frontier; propose-reference! for "
+       "a strong source that deserves its own literature note. Then stop."))
 
 ;; ---------------------------------------------------------------------------
 ;; stages — the process as DATA. role key -> stage spec. Add/replace a stage
@@ -186,7 +223,7 @@
    {:stage    "READ"
     :practice "Adler analytical reading + Zettelkasten literature note"
     :writes?  true
-    :tools    ["recall" "fetch" "open-tasks" "enrich-task!" "propose-research!" "propose-reference!" "put-reference!"]
+    :tools    ["recall" "fetch" "open-tasks" "enrich-task!" "propose-reference!" "put-reference!"]
     :model    "opencode-go/deepseek-v4-pro"
     :system   read-system}
 
@@ -195,10 +232,18 @@
     :practice "scientific inquiry + syntopical reading + STORM/PRISMA + Toulmin + Zettelkasten permanent note"
     :writes?  true
     :tools    ["recall" "search" "fetch" "central" "reference-frequency" "open-tasks"
-               "check-zettel" "put-concept!" "put-connection!" "put-answer!" "put-reference!"
-               "propose-research!" "propose-reference!"]
+               "check-zettel" "put-concept!" "propose-reference!"]
     :model    "opencode-go/deepseek-v4-pro"
-    :system   investigate-system}})
+    :system   investigate-system}
+
+   :report
+   {:stage    "RESEARCH"
+    :practice "full research cycle — framing + syntopical reading + STORM/PRISMA cited survey + Toulmin findings, written as one long-form report"
+    :writes?  true
+    :tools    ["recall" "search" "fetch" "central" "reference-frequency" "open-tasks"
+               "check-zettel" "put-research!" "propose-reference!"]
+    :model    "opencode-go/deepseek-v4-pro"
+    :system   research-system}})
 
 (defn roles [] (keys stages))
 

@@ -14,7 +14,8 @@
             [clojure.string :as str]
             [researcher.runner :as runner]
             [researcher.github :as gh]
-            [researcher.projects :as projects]))
+            [researcher.projects :as projects]
+            [researcher.process :as process]))
 
 ;; --------------------------------------------------------------------------
 ;; git plumbing (own checkout; read-only scan + push-to-main for relink)
@@ -256,3 +257,106 @@
     (vec (for [{:keys [title files]} pick]
            (do (file-concept-task! cfg title (sort (map #(card-link cfg dir %) files)))
                title)))))
+
+;; --------------------------------------------------------------------------
+;; job 4: curate-research — pick the single most interesting open question and
+;;        file it as a research task. Gated: nothing while a research PR is in
+;;        flight (one research at a time). A question is "covered" once a research
+;;        card or an open research issue carries it verbatim — so the same question
+;;        is never re-picked, and the LLM judge only runs when something is uncovered.
+;; --------------------------------------------------------------------------
+
+(defn open-questions
+  "Every unresolved question across the wiki: bullet lines under a `## Open questions`
+   heading in any card, verbatim (leading bullet marker stripped)."
+  [dir]
+  (->> (content-files dir)
+       (mapcat (fn [f]
+                 (let [sec (second (re-find #"(?ims)^##\s+open\s+questions\s*$(.*?)(?=^##\s|\z)"
+                                            (slurp f)))]
+                   (when sec
+                     (->> (str/split-lines sec)
+                          (keep #(second (re-find #"^\s*[-*]\s+(.+)$" %))))))))
+       (map str/trim)
+       (remove str/blank?)
+       distinct
+       vec))
+
+(defn- research-card-titles
+  "Titles of research report cards already written to main (content/research/)."
+  [dir]
+  (->> (content-files dir)
+       (filter #(str/starts-with? (rel-of dir %) "content/research/"))
+       (keep #(fm-field (slurp %) "title"))
+       (map str/trim)
+       set))
+
+(defn- research-issue-titles
+  "Titles of OPEN research issues (task filed, card not yet on main)."
+  [cfg]
+  (->> (gh/open-issues cfg)
+       (filter (fn [i] (some #(= "type:research" (get % "name")) (get i "labels"))))
+       (map #(str/trim (str (get % "title"))))
+       set))
+
+(defn- open-research-pr?
+  "True if an open PR belongs to a research task (its issue is labelled
+   type:research). The one-research-at-a-time gate — keyed on PR state, not the
+   issue (issues go Done on open, PRs stay open until merged)."
+  [cfg]
+  (let [prefix (get-in cfg [:worker :branch-prefix] "researcher/issue-")
+        pat    (re-pattern (str (java.util.regex.Pattern/quote prefix) "(\\d+)"))]
+    (boolean
+     (some (fn [pr]
+             (when-let [n (some-> (get-in pr ["head" "ref"]) (->> (re-find pat)) second Integer/parseInt)]
+               (try (boolean (some #(= "type:research" (get % "name"))
+                                   (get (gh/get-issue cfg n) "labels")))
+                    (catch Throwable _ false))))
+           (gh/open-prs cfg)))))
+
+(def ^:private judge-system
+  (str "You are curating the research agenda for a wiki grown from Andy Smith's public notes. "
+       "Below is a numbered list of OPEN questions. Choose the SINGLE most worth researching NOW — "
+       "most interesting = it advances the wiki's core themes, is genuinely open and non-obvious, and "
+       "is high-leverage (its answer unlocks or connects many ideas). "
+       "Reply with ONLY the number of your choice — no words, no punctuation."))
+
+(defn- judge-question
+  "LLM judge: pick the most interesting question from `pool`. Returns the chosen
+   string, or nil if the model gave no parseable in-range choice."
+  [cfg pool]
+  (let [numbered (str/join "\n" (map-indexed (fn [i q] (str (inc i) ". " q)) pool))
+        model    (or (get-in cfg [:reflect :research-model]) (get-in cfg [:omp :model]))
+        {:keys [exit out]} (sh "omp" "-p" "--no-tools" "--no-session" "--no-title"
+                               "--model" model "--system-prompt" judge-system "--" numbered)
+        n (when (zero? exit) (some-> (re-find #"\d+" (str out)) Integer/parseInt))]
+    (when (and n (<= 1 n (count pool))) (nth pool (dec n)))))
+
+(defn- file-research-task! [cfg question]
+  (let [issue (gh/create-issue cfg {:title  question
+                                    :labels ["type:research" "role:report"]
+                                    :body   (str "## Question\n\n" question "\n\n"
+                                                 "Auto-curated by reflect from the wiki's open "
+                                                 "questions.\n\n" (process/practice-ref :report) "\n")})]
+    (when-let [p (projects/find-project cfg)]
+      (projects/add-to-backlog! cfg (get p "id") (get issue "node_id")))
+    (get issue "number")))
+
+(defn curate-research!
+  "Pick the single most interesting UNCOVERED open question and file it as a research
+   task. No-op while a research PR is in flight, or when every question is already
+   covered by a research card / open research issue (judge runs ONLY when uncovered
+   ones exist, so an idle tick spends nothing). dry? prints the choice instead."
+  [cfg & [{:keys [dry?]}]]
+  (if (open-research-pr? cfg)
+    {:skipped :research-pr-open}
+    (let [dir     (fresh-main! cfg)
+          covered (into (research-card-titles dir) (research-issue-titles cfg))
+          pool    (->> (open-questions dir) (remove covered) vec)]
+      (if (empty? pool)
+        {:skipped :none-uncovered}
+        (let [chosen (judge-question cfg pool)]
+          (cond
+            (str/blank? (str chosen)) {:skipped :no-choice :pool (count pool)}
+            dry?  {:dry :research :chosen chosen :pool (count pool)}
+            :else {:filed (file-research-task! cfg chosen) :title chosen :pool (count pool)}))))))

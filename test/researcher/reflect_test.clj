@@ -1,6 +1,7 @@
 (ns researcher.reflect-test
   (:require [clojure.test :refer [deftest is]]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [researcher.reflect :as reflect]))
 
 (deftest normalize-url-strips-noise
@@ -45,3 +46,15 @@
       (is (= "Multi-agent system" (get-in freq ["multi-agent-system" :title])))
       (is (nil? (get freq "sandbox")) "resolves to an existing card -> not a candidate")
       (is (= 1 (count (get-in freq ["least-privilege" :files]))) "dangling, only 1 card"))))
+
+(deftest open-questions-collects-and-dedups
+  (let [dir (str (System/getProperty "java.io.tmpdir") "/reflect-oq-" (System/currentTimeMillis))
+        w   (fn [rel s] (let [f (io/file dir rel)] (io/make-parents f) (spit f s)))]
+    (w "content/references/a.md"
+       "---\ntitle: A\n---\nbody\n\n## Open questions\n\n- How does X scale?\n- Why does Y matter?\n\n## Sources\n\n- https://a.com")
+    (w "content/concepts/b.md"
+       "---\ntitle: B\n---\ntext\n\n## Open questions\n- How does X scale?\n")
+    (let [qs (reflect/open-questions dir)]
+      (is (= #{"How does X scale?" "Why does Y matter?"} (set qs)) "collects bullets, dedups across cards")
+      (is (= 2 (count qs)))
+      (is (not-any? #(str/includes? % "https://a.com") qs) "stops at the next heading"))))
