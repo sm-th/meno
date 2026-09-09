@@ -60,14 +60,31 @@
   "Wiki subfolder per card type — keeps meta/concepts/references/connections apart."
   {:concept "concepts" :reference "references" :connection "connections" :answer "answers" :meta "meta"})
 
-(defn card-rel [type slug]
-  (str "content/" (get section (or type :concept) "concepts") "/" slug ".md"))
+(defn domain-of
+  "Host of a URL as a filesystem-safe folder name: scheme/path/port/www stripped,
+   lowercased (https://www.Reproducible-Builds.org/docs -> reproducible-builds.org)."
+  [url]
+  (let [s    (str/trim (str url))
+        host (or (second (re-find #"^[a-zA-Z][a-zA-Z0-9+.-]*://([^/]+)" s))
+                 (second (re-find #"^([^/]+)" s)))
+        host (-> (str host) (str/split #":") first str/lower-case
+                 (str/replace #"^www\." "") (str/replace #"[^a-z0-9.-]" ""))]
+    (if (str/blank? host) "unknown" host)))
+
+(defn card-rel
+  "Repo-relative path for a card. Reference cards nest under their source domain
+   (references/<site>/<slug>.md) to keep the folder tidy; other types sit flat."
+  ([type slug] (card-rel type slug nil))
+  ([type slug subdir]
+   (str "content/" (get section (or type :concept) "concepts") "/"
+        (when (seq (str subdir)) (str subdir "/")) slug ".md")))
 
 (defn put-page!
   "Write/overwrite a card on the writer's branch and commit. Returns page meta."
   [{:keys [cfg repo branch] :as w} page]
   (let [slug (slugify (:title page))
-        rel  (card-rel (:type page) slug)
+        rel  (card-rel (:type page) slug
+                       (when (= :reference (:type page)) (domain-of (:url page))))
         name  (get-in cfg [:wiki :author-name]  "smith-wiki-bot")
         email (get-in cfg [:wiki :author-email] "bot@smith.wiki")]
     (ensure-branch! w)

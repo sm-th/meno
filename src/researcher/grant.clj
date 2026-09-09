@@ -193,7 +193,7 @@
                              (if (str/blank? (str (:url page)))
                                {:rejected (:title page) :reason "a reference card needs a :url — it goes in the frontmatter so the source is machine-parsable"}
                                (if dry?
-                                 (do (println (str "\n===== DRY put-reference! -> " (wiki/card-rel :reference (wiki/slugify (:title page))) " =====\n" (wiki/render (assoc page :type :reference)) "\n==============================")) (flush) {:dry :reference :title (:title page)})
+                                 (do (println (str "\n===== DRY put-reference! -> " (wiki/card-rel :reference (wiki/slugify (:title page)) (wiki/domain-of (:url page))) " =====\n" (wiki/render (assoc page :type :reference)) "\n==============================")) (flush) {:dry :reference :title (:title page)})
                                  (wiki/put-page! w (assoc page :type :reference))))))
          "check-zettel"    (fn [card]
                              (let [p (str "Proposed " (name (or (:type card) :concept)) " card.\n\nTITLE: "
