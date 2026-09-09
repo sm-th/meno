@@ -246,21 +246,17 @@
   (let [dir    (fresh-main! cfg)
         thr    (get-in cfg [:reflect :concept-threshold] 2)
         freq   (concept-frequency dir)
-        open   (gh/open-issues cfg)
-        queued (->> open
-                    (map #(str (get % "title")))
-                    (filter #(str/starts-with? % "Add concept: "))
-                    (map #(quartz-slug (str/replace % #"^Add concept:\s*" "")))
-                    set)                       ; dedup by SLUG, robust to title casing/display
+        open   (set (map #(str (get % "title")) (gh/open-issues cfg)))
         cap    (get-in cfg [:planner :wip-cap] 10)
         budget (max 0 (- cap (count open)))
         want   (->> freq
-                    (filter (fn [[slug {:keys [files]}]]
+                    (map second)
+                    (filter (fn [{:keys [files title]}]
                               (and (>= (count files) thr)
-                                   (not (contains? queued slug)))))
-                    (sort-by (fn [[_ {:keys [files]}]] (- (count files)))))
+                                   (not (contains? open (str "Add concept: " title))))))
+                    (sort-by (fn [{:keys [files]}] (- (count files)))))
         pick   (take (min budget (get-in cfg [:reflect :max-per-run] 3)) want)]
-    (vec (for [[_ {:keys [title files]}] pick]
+    (vec (for [{:keys [title files]} pick]
            (do (file-concept-task! cfg title (sort (map #(card-link cfg dir %) files)))
                title)))))
 
