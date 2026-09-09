@@ -82,25 +82,25 @@
 (defn put-page!
   "Write/overwrite a card on the writer's branch and commit. Returns page meta."
   [{:keys [cfg repo branch] :as w} page]
-  (let [slug (slugify (:title page))            ; base title -> slug: keeps [[Title]] links resolving
-        dom  (when (= :reference (:type page)) (domain-of (:url page)))
-        disp (if (and (seq (str dom)) (not= dom "unknown")
-                      (not (str/includes? (str/lower-case (str (:title page))) (str dom))))
-               (str (:title page) " (" dom ")")   ; display title shows provenance
-               (:title page))
-        rel  (card-rel (:type page) slug dom)
+  (let [dom   (when (= :reference (:type page)) (domain-of (:url page)))
+        title (if (and (seq (str dom)) (not= dom "unknown")
+                       (not (str/includes? (str/lower-case (str (:title page))) (str dom))))
+                (str (:title page) " (" dom ")")
+                (:title page))
+        slug  (slugify title)            ; a reference's site is part of its slug -> [[Title (site)]]
+        rel   (card-rel (:type page) slug dom)
         name  (get-in cfg [:wiki :author-name]  "smith-wiki-bot")
         email (get-in cfg [:wiki :author-email] "bot@smith.wiki")]
     (ensure-branch! w)
     (io/make-parents (io/file repo rel))
-    (spit (str repo "/" rel) (render (assoc page :title disp)))
+    (spit (str repo "/" rel) (render (assoc page :title title)))
     (git! repo "add" rel)
     (git! repo
           "-c" (str "user.name=" name)
           "-c" (str "user.email=" email)
           "-c" "commit.gpgsign=false"
-          "commit" "-m" (str "wiki: " (:title page)))
-    {:slug slug :path rel :branch branch :title (:title page)}))
+          "commit" "-m" (str "wiki: " title))
+    {:slug slug :path rel :branch branch :title title}))
 
 (defn work-dir [cfg]
   (or (get-in cfg [:wiki :work-dir])
