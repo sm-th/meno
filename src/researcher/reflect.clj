@@ -76,8 +76,7 @@
           second str/trim))
 
 (defn reference-index
-  "Map normalized-url -> {:title :rel :slug} for every reference card that declares a url.
-   :slug is the file basename — the wikilink target Quartz actually resolves."
+  "Map normalized-url -> {:title :rel} for every reference card that declares a url."
   [dir]
   (into {}
         (for [f (content-files dir)
@@ -85,8 +84,7 @@
               :when (str/starts-with? rel "content/references/")
               :let [t (slurp f) u (fm-field t "url")]
               :when (seq (str u))]
-          [(normalize-url u) {:title (fm-field t "title") :rel rel
-                              :slug  (-> rel (str/split #"/") last (str/replace #"\.md$" ""))}])))
+          [(normalize-url u) {:title (fm-field t "title") :rel rel}])))
 
 (defn source-frequency
   "Map normalized-url -> set of rel paths mentioning it (across all cards)."
@@ -131,15 +129,14 @@
 
 (defn relink-text
   "Rewrite mentions of `url` — a bare url or [label](url) (trailing-slash tolerant,
-   prefix-safe) — AND any already-made bare [[title]] into [[slug|title]]: the link
-   TARGET is the reference file's slug (what Quartz resolves), the title is the display."
-  [text url slug title]
+   prefix-safe) — into the natural wikilink [[title]]. Reference cards are FILE-named
+   by their title, so Quartz resolves [[title]] out of the box (no slug guessing)."
+  [text url title]
   (let [q    (java.util.regex.Pattern/quote url)
         md   (re-pattern (str "\\[[^\\]]*\\]\\(" q "/?\\)"))
         ba   (re-pattern (str q "/?(?![\\w./-])"))
-        tt   (re-pattern (str "\\[\\[" (java.util.regex.Pattern/quote title) "\\]\\]"))
-        link (str "[[" slug "|" title "]]")]
-    (-> (str text) (str/replace md link) (str/replace ba link) (str/replace tt link))))
+        link (str "[[" title "]]")]
+    (-> (str text) (str/replace md link) (str/replace ba link))))
 
 (defn relink-sources!
   "Across every card, rewrite bare source URLs that have a reference card into
@@ -152,11 +149,10 @@
     (doseq [f (content-files dir)
             :let [rel (rel-of dir f) text (slurp f)]]
       (let [text' (reduce (fn [t [u card]]
-                            (let [title (:title card) slug (:slug card)]
-                              (if (or (str/blank? (str title)) (str/blank? (str slug))
-                                      (= (:rel card) rel))
+                            (let [title (:title card)]
+                              (if (or (str/blank? (str title)) (= (:rel card) rel))
                                 t
-                                (relink-text t u slug title))))
+                                (relink-text t u title))))
                           text cards)]
         (when (not= text text')
           (spit f text')

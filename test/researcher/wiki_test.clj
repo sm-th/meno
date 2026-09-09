@@ -3,10 +3,12 @@
             [researcher.wiki :as wiki]
             [clojure.string :as str]))
 
-(deftest slugify-cases
-  (is (= "hello-world" (wiki/slugify "Hello, World!")))
-  (is (= "least-privilege" (wiki/slugify "  Least   Privilege  ")))
-  (is (= "a-b-c" (wiki/slugify "a/b/c"))))
+(deftest card-file-cases
+  (is (= "Hello, World!" (wiki/card-file "Hello, World!")) "keeps readable chars; Quartz slugs the URL")
+  (is (= "Least   Privilege" (wiki/card-file "  Least   Privilege  ")) "trims ends")
+  (is (= "abc" (wiki/card-file "a/b/c")) "strips path separators")
+  (is (= "Reproducible builds (reproducible-builds.org)"
+         (wiki/card-file "Reproducible builds (reproducible-builds.org)")) "parens/dots kept"))
 
 (deftest card-routing-by-type
   (is (= "content/concepts/x.md"    (wiki/card-rel :concept "x")))
@@ -39,7 +41,8 @@
   (is (= "andysmith.ai" (wiki/domain-of "https://andysmith.ai/2026/x")))
   (is (= "unknown" (wiki/domain-of nil))))
 
-(deftest reference-nests-under-domain
-  (is (= "content/references/andysmith.ai/ephemeral-agents.md"
-         (wiki/card-rel :reference "ephemeral-agents" "andysmith.ai")))
-  (is (= "content/concepts/x.md" (wiki/card-rel :concept "x" nil)) "non-references stay flat"))
+(deftest reference-nests-under-domain-by-title
+  (is (= "content/references/andysmith.ai/Ephemeral agents (andysmith.ai).md"
+         (wiki/card-rel :reference "Ephemeral agents (andysmith.ai)" "andysmith.ai")))
+  (is (= "content/concepts/Principle of least privilege.md"
+         (wiki/card-rel :concept "Principle of least privilege")) "non-references flat, named by title"))

@@ -13,16 +13,14 @@
   (let [md "see https://a.com/x and [lbl](https://b.org/y), also https://a.com/x/ again"]
     (is (= #{"https://a.com/x" "https://b.org/y"} (set (reflect/extract-urls md))))))
 
-(deftest relink-text-targets-slug-with-title-display
-  (is (= "[[s|T]]" (reflect/relink-text "https://a.com/x" "https://a.com/x" "s" "T")))
-  (is (= "[[s|T]]" (reflect/relink-text "[label](https://a.com/x)" "https://a.com/x" "s" "T")))
-  (is (= "[[s|T]]" (reflect/relink-text "https://a.com/x/" "https://a.com/x" "s" "T")))
-  (is (= "[[s|T]]" (reflect/relink-text "[[T]]" "https://a.com/x" "s" "T")) "fixes an already-broken bare [[title]]")
-  (is (= "see [[s|T]] now" (reflect/relink-text "see https://a.com/x now" "https://a.com/x" "s" "T"))))
+(deftest relink-text-natural-wikilink
+  (is (= "[[T]]" (reflect/relink-text "https://a.com/x" "https://a.com/x" "T")))
+  (is (= "[[T]]" (reflect/relink-text "[label](https://a.com/x)" "https://a.com/x" "T")))
+  (is (= "[[T]]" (reflect/relink-text "https://a.com/x/" "https://a.com/x" "T")))
+  (is (= "see [[T]] now" (reflect/relink-text "see https://a.com/x now" "https://a.com/x" "T"))))
 
 (deftest relink-text-never-clobbers-a-longer-url
-  ;; a shorter url that is a prefix of a longer one must be left alone
-  (is (= "https://a.com/xy" (reflect/relink-text "https://a.com/xy" "https://a.com/x" "s" "T"))))
+  (is (= "https://a.com/xy" (reflect/relink-text "https://a.com/xy" "https://a.com/x" "T"))))
 
 (deftest index-and-frequency-over-a-tree
   (let [dir (str (System/getProperty "java.io.tmpdir") "/reflect-test-" (System/currentTimeMillis))

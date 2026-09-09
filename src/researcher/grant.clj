@@ -172,28 +172,27 @@
                           (fn [page]
                             (if dry?
                               (do (println (str "\n===== DRY put-concept! -> "
-                                                (wiki/card-rel :concept (wiki/slugify (:title page))) " =====\n"
+                                                (wiki/card-rel :concept (:title page)) " =====\n"
                                                 (wiki/render (assoc page :type :concept))
                                                 "\n==============================")) (flush)
                                   {:dry :concept :title (:title page)})
-                              (let [slug    (wiki/slugify (:title page))
-                                    f       (java.io.File. (str wiki-repo "/" (wiki/card-rel :concept slug)))
+                              (let [f       (java.io.File. (str wiki-repo "/" (wiki/card-rel :concept (:title page))))
                                     existed (.exists f)
                                     body    (str (:body page))
                                     cap     (get-in cfg [:wiki :concept-body-max] 900)]
                                 (if (> (count body) cap)
-                                  {:rejected slug :reason (str "concept body is " (count body) " chars > " cap
+                                  {:rejected (:title page) :reason (str "concept body is " (count body) " chars > " cap
                                                                " — a concept card is a SHORT definition; cut it and move the depth into separate question tasks")}
                                   ;; overwrite allowed: a later research legitimately amends an earlier
                                   ;; card; the PR shows the diff for human review.
                                   (assoc (wiki/put-page! w (assoc page :type :concept)) :amended existed))))))
-         "put-connection!" (when w (fn [page] (if dry? (do (println (str "\n===== DRY put-connection! -> " (wiki/card-rel :connection (wiki/slugify (:title page))) " =====\n" (wiki/render (assoc page :type :connection)) "\n==============================")) (flush) {:dry :connection :title (:title page)}) (wiki/put-page! w (assoc page :type :connection)))))
-         "put-answer!"     (when w (fn [page] (if dry? (do (println (str "\n===== DRY put-answer! -> " (wiki/card-rel :answer (wiki/slugify (:title page))) " =====\n" (wiki/render (assoc page :type :answer)) "\n==============================")) (flush) {:dry :answer :title (:title page)}) (wiki/put-page! w (assoc page :type :answer)))))
+         "put-connection!" (when w (fn [page] (if dry? (do (println (str "\n===== DRY put-connection! -> " (wiki/card-rel :connection (:title page)) " =====\n" (wiki/render (assoc page :type :connection)) "\n==============================")) (flush) {:dry :connection :title (:title page)}) (wiki/put-page! w (assoc page :type :connection)))))
+         "put-answer!"     (when w (fn [page] (if dry? (do (println (str "\n===== DRY put-answer! -> " (wiki/card-rel :answer (:title page)) " =====\n" (wiki/render (assoc page :type :answer)) "\n==============================")) (flush) {:dry :answer :title (:title page)}) (wiki/put-page! w (assoc page :type :answer)))))
          "put-reference!"  (when w (fn [page]
                              (if (str/blank? (str (:url page)))
                                {:rejected (:title page) :reason "a reference card needs a :url — it goes in the frontmatter so the source is machine-parsable"}
                                (if dry?
-                                 (do (println (str "\n===== DRY put-reference! -> " (wiki/card-rel :reference (wiki/slugify (:title page)) (wiki/domain-of (:url page))) " =====\n" (wiki/render (assoc page :type :reference)) "\n==============================")) (flush) {:dry :reference :title (:title page)})
+                                 (do (println (str "\n===== DRY put-reference! -> " (wiki/card-rel :reference (:title page) (wiki/domain-of (:url page))) " =====\n" (wiki/render (assoc page :type :reference)) "\n==============================")) (flush) {:dry :reference :title (:title page)})
                                  (wiki/put-page! w (assoc page :type :reference))))))
          "check-zettel"    (fn [card]
                              (let [p (str "Proposed " (name (or (:type card) :concept)) " card.\n\nTITLE: "

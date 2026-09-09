@@ -6,10 +6,13 @@
             [clojure.java.io :as io]
             [clojure.string :as str]))
 
-(defn slugify [title]
-  (-> title str/lower-case
-      (str/replace #"[^a-z0-9]+" "-")
-      (str/replace #"(^-+|-+$)" "")))
+(defn card-file
+  "On-disk filename stem for a card: the TITLE, with only filesystem/URL-forbidden
+   characters stripped. Quartz derives the URL slug from this name AND from the
+   [[wikilink]] text with its own slugifier, so [[Title]] always resolves — we never
+   compute or guess a slug ourselves (that was fragile)."
+  [title]
+  (-> (str title) str/trim (str/replace #"[/\\:*?\"<>|#]" "")))
 
 (defn- git! [repo & args]
   (let [r (apply sh "git" "-C" repo "-c" "safe.directory=*" args)]
@@ -72,12 +75,12 @@
     (if (str/blank? host) "unknown" host)))
 
 (defn card-rel
-  "Repo-relative path for a card. Reference cards nest under their source domain
-   (references/<site>/<slug>.md) to keep the folder tidy; other types sit flat."
-  ([type slug] (card-rel type slug nil))
-  ([type slug subdir]
+  "Repo-relative path for a card, NAMED BY ITS TITLE. Reference cards nest under
+   their source domain (references/<site>/<Title>.md); other types sit flat."
+  ([type title] (card-rel type title nil))
+  ([type title subdir]
    (str "content/" (get section (or type :concept) "concepts") "/"
-        (when (seq (str subdir)) (str subdir "/")) slug ".md")))
+        (when (seq (str subdir)) (str subdir "/")) (card-file title) ".md")))
 
 (defn put-page!
   "Write/overwrite a card on the writer's branch and commit. Returns page meta."
@@ -87,8 +90,7 @@
                        (not (str/includes? (str/lower-case (str (:title page))) (str dom))))
                 (str (:title page) " (" dom ")")
                 (:title page))
-        slug  (slugify title)            ; a reference's site is part of its slug -> [[Title (site)]]
-        rel   (card-rel (:type page) slug dom)
+        rel   (card-rel (:type page) title dom)
         name  (get-in cfg [:wiki :author-name]  "smith-wiki-bot")
         email (get-in cfg [:wiki :author-email] "bot@smith.wiki")]
     (ensure-branch! w)
@@ -100,7 +102,7 @@
           "-c" (str "user.email=" email)
           "-c" "commit.gpgsign=false"
           "commit" "-m" (str "wiki: " title))
-    {:slug slug :path rel :branch branch :title title}))
+    {:slug (card-file title) :path rel :branch branch :title title}))
 
 (defn work-dir [cfg]
   (or (get-in cfg [:wiki :work-dir])
