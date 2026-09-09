@@ -267,6 +267,7 @@
     :practice "Adler analytical reading + Zettelkasten literature note"
     :writes?  true
     :tools    ["recall" "fetch" "open-tasks" "enrich-task!" "put-reference!"]
+    :model    "opencode-go/deepseek-v4-flash"
     :system   read-system}
 
    :research
@@ -275,6 +276,7 @@
     :writes?  true
     :tools    ["recall" "search" "fetch" "central" "reference-frequency" "open-tasks"
                "check-zettel" "put-concept!"]
+    :model    "opencode-go/deepseek-v4-flash"
     :system   investigate-system}
 
    :report
@@ -283,6 +285,7 @@
     :writes?  true
     :tools    ["recall" "search" "fetch" "central" "reference-frequency" "open-tasks"
                "check-zettel" "put-research!"]
+    :model    "opencode-go/deepseek-v4-flash"
     :system   research-system}
 
    :curate
@@ -290,6 +293,7 @@
     :practice "FINER-selected + PCC-scoped question, Strong-Inference competing hypotheses, PRISMA-P survey protocol"
     :writes?  false
     :tools    ["recall" "search" "fetch" "central" "reference-frequency" "open-tasks" "submit-plan!"]
+    :model    "opencode-go/deepseek-v4-flash"
     :system   curate-system}})
 
 (defn roles [] (keys stages))
