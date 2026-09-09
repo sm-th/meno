@@ -15,7 +15,7 @@
             [researcher.runner :as runner]
             [researcher.github :as gh]
             [researcher.projects :as projects]
-            [researcher.process :as process]))
+            [researcher.task :as task]))
 
 ;; --------------------------------------------------------------------------
 ;; git plumbing (own checkout; read-only scan + push-to-main for relink)
@@ -262,25 +262,47 @@
 ;; job 4: curate-research — pick the single most interesting open question and
 ;;        file it as a research task. Gated: nothing while a research PR is in
 ;;        flight (one research at a time). A question is "covered" once a research
-;;        card or an open research issue carries it verbatim — so the same question
+;;        card or an open research issue carries it — so the same question
 ;;        is never re-picked, and the LLM judge only runs when something is uncovered.
 ;; --------------------------------------------------------------------------
 
-(defn open-questions
-  "Every unresolved question across the wiki: bullet lines under a `## Open questions`
-   heading in any card, verbatim (leading bullet marker stripped)."
+(defn- clean-question
+  "Normalise an `## Open questions` bullet into a plain, self-contained question:
+   drop a leading **bold label**: prefix and any inline markdown (bold, italic, code,
+   wikilinks, links), collapse whitespace. Deterministic + idempotent, so the pool and
+   the filed title always agree — coverage dedup stays stable."
+  [s]
+  (-> (str s)
+      str/trim
+      (str/replace #"^\*\*[^*]+\*\*\s*[:：—–-]+\s*" "")
+      (str/replace #"`([^`]*)`" "$1")
+      (str/replace #"\*\*([^*]+)\*\*" "$1")
+      (str/replace #"(?<!\*)\*([^*]+)\*(?!\*)" "$1")
+      (str/replace #"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]" "$1")
+      (str/replace #"\[([^\]]+)\]\([^)]*\)" "$1")
+      (str/replace #"\s+" " ")
+      str/trim))
+
+(defn question-sources
+  "Map cleaned open-question -> set of rel paths (cards) that raise it: every bullet
+   under a `## Open questions` heading, normalised; blanks dropped."
   [dir]
-  (->> (content-files dir)
-       (mapcat (fn [f]
-                 (let [sec (second (re-find #"(?ims)^##\s+open\s+questions\s*$(.*?)(?=^##\s|\z)"
-                                            (slurp f)))]
-                   (when sec
-                     (->> (str/split-lines sec)
-                          (keep #(second (re-find #"^\s*[-*]\s+(.+)$" %))))))))
-       (map str/trim)
-       (remove str/blank?)
-       distinct
-       vec))
+  (reduce
+   (fn [acc f]
+     (let [rel (rel-of dir f)
+           sec (second (re-find #"(?ims)^##\s+open\s+questions\s*$(.*?)(?=^##\s|\z)" (slurp f)))]
+       (if-not sec
+         acc
+         (reduce (fn [a line]
+                   (let [q (some-> (second (re-find #"^\s*[-*]\s+(.+)$" line)) clean-question)]
+                     (if (str/blank? (str q)) a (update a q (fnil conj #{}) rel))))
+                 acc (str/split-lines sec)))))
+   {} (content-files dir)))
+
+(defn open-questions
+  "Distinct cleaned open questions across the wiki (see question-sources)."
+  [dir]
+  (vec (keys (question-sources dir))))
 
 (defn- research-card-titles
   "Titles of research report cards already written to main (content/research/)."
@@ -314,49 +336,52 @@
                     (catch Throwable _ false))))
            (gh/open-prs cfg)))))
 
-(def ^:private judge-system
-  (str "You are curating the research agenda for a wiki grown from Andy Smith's public notes. "
-       "Below is a numbered list of OPEN questions. Choose the SINGLE most worth researching NOW — "
-       "most interesting = it advances the wiki's core themes, is genuinely open and non-obvious, and "
-       "is high-leverage (its answer unlocks or connects many ideas). "
-       "Reply with ONLY the number of your choice — no words, no punctuation."))
+(defn- pool-prompt [qmap pool]
+  (str "OPEN QUESTIONS surfaced across the wiki — pick ONE to research next:\n\n"
+       (str/join "\n"
+                 (map-indexed (fn [i q]
+                                (str (inc i) ". " q
+                                     "  [raised in " (count (get qmap q)) " card(s)]"))
+                              pool))))
 
-(defn- judge-question
-  "LLM judge: pick the most interesting question from `pool`. Returns the chosen
-   string, or nil if the model gave no parseable in-range choice."
-  [cfg pool]
-  (let [numbered (str/join "\n" (map-indexed (fn [i q] (str (inc i) ". " q)) pool))
-        model    (or (get-in cfg [:reflect :research-model]) (get-in cfg [:omp :model]))
-        {:keys [exit out]} (sh "omp" "-p" "--no-tools" "--no-session" "--no-title"
-                               "--model" model "--system-prompt" judge-system "--" numbered)
-        n (when (zero? exit) (some-> (re-find #"\d+" (str out)) Integer/parseInt))]
-    (when (and n (<= 1 n (count pool))) (nth pool (dec n)))))
-
-(defn- file-research-task! [cfg question]
+(defn- file-research-task! [cfg question proposal links]
   (let [issue (gh/create-issue cfg {:title  question
                                     :labels ["type:research" "role:report"]
                                     :body   (str "## Question\n\n" question "\n\n"
-                                                 "Auto-curated by reflect from the wiki's open "
-                                                 "questions.\n\n" (process/practice-ref :report) "\n")})]
+                                                 (str/trim (str proposal)) "\n\n"
+                                                 "---\n\nRaised in these cards:\n\n"
+                                                 (str/join "\n" (map #(str "- " %) links)) "\n\n"
+                                                 "_Auto-curated by reflect._\n")})]
     (when-let [p (projects/find-project cfg)]
       (projects/add-to-backlog! cfg (get p "id") (get issue "node_id")))
     (get issue "number")))
 
 (defn curate-research!
-  "Pick the single most interesting UNCOVERED open question and file it as a research
-   task. No-op while a research PR is in flight, or when every question is already
-   covered by a research card / open research issue (judge runs ONLY when uncovered
-   ones exist, so an idle tick spends nothing). dry? prints the choice instead."
+  "Pick the single most interesting UNCOVERED open question and file it as a fully-planned
+   research task. No-op while a research PR is in flight, or when every question is already
+   covered by a research card / open research issue (the planner — an omp run that may search
+   the web — runs ONLY when uncovered questions exist, so an idle tick spends nothing).
+   dry? runs the planner but prints the proposal instead of filing."
   [cfg & [{:keys [dry?]}]]
   (if (open-research-pr? cfg)
     {:skipped :research-pr-open}
     (let [dir     (fresh-main! cfg)
+          qmap    (question-sources dir)
           covered (into (research-card-titles dir) (research-issue-titles cfg))
-          pool    (->> (open-questions dir) (remove covered) vec)]
+          pool    (->> (keys qmap) (remove covered) vec)]
       (if (empty? pool)
         {:skipped :none-uncovered}
-        (let [chosen (judge-question cfg pool)]
-          (cond
-            (str/blank? (str chosen)) {:skipped :no-choice :pool (count pool)}
-            dry?  {:dry :research :chosen chosen :pool (count pool)}
-            :else {:filed (file-research-task! cfg chosen) :title chosen :pool (count pool)}))))))
+        (do
+          (reset! task/plan nil)
+          (runner/run-issue cfg {:role :curate :title "Research planning"
+                                 :body (pool-prompt qmap pool)})
+          (let [{:keys [n proposal]} @task/plan
+                n (when (integer? n) (int n))]
+            (if-not (and n (<= 1 n (count pool)))
+              {:skipped :no-plan :pool (count pool)}
+              (let [q     (nth pool (dec n))
+                    links (map #(card-link cfg dir %) (sort (get qmap q)))]
+                (if dry?
+                  {:dry :research :chosen q :proposal proposal :pool (count pool)}
+                  {:filed (file-research-task! cfg q proposal links)
+                   :title q :pool (count pool)})))))))))

@@ -64,6 +64,7 @@
    "central" "(central n) — the n most-linked pages in the wiki graph"
    "reference-frequency" "(reference-frequency) — most-cited source URLs"
    "open-tasks" "(open-tasks) — [{:number :title}] tasks already queued"
+   "submit-plan!" "(submit-plan! {:n :proposal}) — pick open question #n and submit your research proposal (Markdown); ends the planning run"
    "propose-reference!" "(propose-reference! {:url :context}) — file a task to READ+ingest a source into a reference card"
    "enrich-task!" "(enrich-task! n md) — append a note to an open task"
    "put-concept!" "(put-concept! {:title :description :tags :body :sources}) — write the canonical concept card"
@@ -91,6 +92,7 @@
          "reference-frequency" (fn [] (graph/reference-frequency (graph/load-graph cfg)))
          "open-tasks" (fn [] (mapv (fn [i] {:number (get i "number") :title (get i "title")})
                                    (gh/open-issues cfg)))
+         "submit-plan!" (fn [m] (reset! task/plan {:n (:n m) :proposal (str (:proposal m))}) {:submitted (:n m)})
          "put-research!"   (when w (fn [page] (if dry? (do (println (str "\n===== DRY put-research! -> " (wiki/card-rel :research (:title page)) " =====\n" (wiki/render (assoc page :type :research)) "\n==============================")) (flush) {:dry :research :title (:title page)}) (wiki/put-page! w (assoc page :type :research)))))
          "propose-reference!"
          (fn [m]

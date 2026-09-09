@@ -17,3 +17,8 @@
    what they would do instead of touching GitHub/the wiki — so a whole stage can be
    run through the REAL pipeline and watched on screen. Set via (researcher.mcp/dry!)."
   (atom false))
+
+(def plan
+  "Capture slot for the research-planning stage (:curate): {:n <int> :proposal <md>},
+   written by the granted submit-plan! and read by reflect/curate-research!."
+  (atom nil))

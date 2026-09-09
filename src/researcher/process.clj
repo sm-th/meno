@@ -64,8 +64,9 @@
        "— it is the frontier). Do NOT file concept tasks: a periodic job promotes a concept to the "
        "queue once several cards link it.\n"
        "- Leave every unresolved QUESTION the source raises in the reference card's `## Open "
-       "questions` section as a plain bullet (a periodic job curates the most interesting into a "
-       "research task). Do NOT file research tasks yourself.\n"
+       "questions` section as ONE plain question sentence per bullet (a real question — no markdown, "
+       "no bold label prefix; a periodic job curates the most interesting into a research task). Do "
+       "NOT file research tasks yourself.\n"
        "- Another SOURCE the note itself cites/links, worth reading in full -> (propose-reference! "
        "{:url \"<url>\" :context \"why it's worth a full literature note / what to look for\"}).\n\n"
        "DEDUP: (recall <x> 8) finds existing cards AND open tasks; (open-tasks) lists the queue. If an "
@@ -111,9 +112,9 @@
        "- Leave a [[Canonical name|short form]] wikilink for every related CONCEPT (dangling is the "
        "frontier). Do NOT file concept tasks — a periodic job queues a concept once several cards "
        "link it.\n"
-       "- A genuinely NEW open question worth researching -> leave it as a plain bullet in a `## Open "
-       "questions` section of the card (a periodic job curates it into a research task). Do NOT file "
-       "research tasks yourself.\n"
+       "- A genuinely NEW open question worth researching -> leave it as ONE plain question sentence "
+       "in a `## Open questions` bullet (a real question — no markdown, no bold label prefix; a "
+       "periodic job curates it into a research task). Do NOT file research tasks yourself.\n"
        "- A source you FETCHED and READ and judged STRONG (foundational; deserves its own full "
        "reference card) -> (propose-reference! {:url \"...\" :context \"what you read and why it's "
        "worth a full literature note\"}). NEVER propose a URL you did not read.\n\n"
@@ -179,10 +180,12 @@
   (str "STAGE: RESEARCH.  PRACTICE: a full best-practice research cycle — precise question "
        "framing, syntopical reading, STORM/PRISMA-style cited survey, Toulmin-structured findings — "
        "recorded as ONE long-form research report card.\n\n"
-       "Input is ONE task: a research QUESTION. Produce ONE research card TITLED by the question "
-       "verbatim, in content/research/. Unlike a concept card (a short definition) or an answer card "
-       "(a single claim), this is the WHOLE cycle written up for a reader: why the question matters, "
-       "what the literature says, and what you conclude.\n\n"
+       "Input is ONE task: a research QUESTION, with a proposal (why it matters, hypotheses, and a "
+       "plan to follow — drafted by the planning stage). Execute the plan: investigate and write ONE "
+       "research card TITLED by the question verbatim, in content/research/. Revise any hypothesis "
+       "the evidence rejects. Unlike a concept card (a short definition) or an answer card (a single "
+       "claim), this is the WHOLE cycle written up for a reader: why the question matters, what the "
+       "literature says, and what you conclude.\n\n"
        "THE REPORT — (put-research! {:title \"<the question, verbatim>\" :tags [...] "
        ":body \"<Markdown>\" :sources [<bare urls you fetched>]}), with these sections in order:\n"
        "## Question — the question restated precisely, and its scope.\n"
@@ -214,6 +217,37 @@
        "a strong source that deserves its own literature note. Then stop."))
 
 ;; ---------------------------------------------------------------------------
+;; PLAN (curate) — the research lead: choose the next question and draft a
+;;                 grounded research proposal (best-practice planning)
+;; ---------------------------------------------------------------------------
+
+(def curate-system
+  (str "STAGE: PLAN.  PRACTICE: research-lead planning — scope a question, ground it in a quick scan "
+       "of the landscape, and draft a proposal a researcher can execute.\n\n"
+       "Input is a NUMBERED list of OPEN questions surfaced across the wiki (with how many cards "
+       "raised each). Do TWO things, then STOP:\n"
+       "1. SELECT the single question most worth researching NOW — highest-leverage: it advances the "
+       "wiki's core themes, is genuinely open and non-obvious, and its answer unlocks or connects "
+       "many ideas. Use (central) and (recall) to weigh what the wiki already knows, and a few "
+       "(search)/(fetch) probes to sense whether a question is tractable and where the live debate is.\n"
+       "2. Draft a concise, GROUNDED research proposal for it — the plan, NOT the answer. Do not "
+       "resolve the question; frame how to resolve it.\n\n"
+       "PROCEDURE:\n"
+       "- (recall <q> 8) and (central 12) — what the wiki already knows / its core concepts.\n"
+       "- a few (search)/(fetch) probes — scan prior art and the current debate to ground the "
+       "motivation, sharpen the hypotheses, and name concrete leads. A snippet is a lead, not "
+       "evidence; you are scoping, not answering.\n"
+       "- then (submit-plan! {:n <the number> :proposal \"<Markdown>\"}) exactly once, then stop.\n\n"
+       "The proposal Markdown, these sections in order:\n"
+       "## Why & what for — why this matters and what answering it unlocks; the wiki concepts and "
+       "tensions it touches (as [[Canonical name]] wikilinks).\n"
+       "## Hypotheses — 1–3 candidate answers or positions worth testing (or 'open — no prior "
+       "commitment' if genuinely exploratory).\n"
+       "## Plan — how to investigate: the angles to pursue, the kinds of sources to survey (prefer "
+       "primary), concrete leads found while scoping (as bare URLs), and what a strong, well-grounded "
+       "answer would have to establish."))
+
+;; ---------------------------------------------------------------------------
 ;; stages — the process as DATA. role key -> stage spec. Add/replace a stage
 ;; here (no engine change). Planning tools (propose-*!) each target their own role.
 ;; ---------------------------------------------------------------------------
@@ -243,7 +277,15 @@
     :tools    ["recall" "search" "fetch" "central" "reference-frequency" "open-tasks"
                "check-zettel" "put-research!" "propose-reference!"]
     :model    "opencode-go/deepseek-v4-pro"
-    :system   research-system}})
+    :system   research-system}
+
+   :curate
+   {:stage    "PLAN"
+    :practice "research-lead planning — grounded question selection + proposal (why / hypotheses / plan)"
+    :writes?  false
+    :tools    ["recall" "search" "fetch" "central" "reference-frequency" "open-tasks" "submit-plan!"]
+    :model    "opencode-go/deepseek-v4-pro"
+    :system   curate-system}})
 
 (defn roles [] (keys stages))
 

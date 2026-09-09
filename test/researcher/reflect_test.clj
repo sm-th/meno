@@ -47,14 +47,18 @@
       (is (nil? (get freq "sandbox")) "resolves to an existing card -> not a candidate")
       (is (= 1 (count (get-in freq ["least-privilege" :files]))) "dangling, only 1 card"))))
 
-(deftest open-questions-collects-and-dedups
+(deftest open-questions-cleans-and-dedups
   (let [dir (str (System/getProperty "java.io.tmpdir") "/reflect-oq-" (System/currentTimeMillis))
         w   (fn [rel s] (let [f (io/file dir rel)] (io/make-parents f) (spit f s)))]
     (w "content/references/a.md"
-       "---\ntitle: A\n---\nbody\n\n## Open questions\n\n- How does X scale?\n- Why does Y matter?\n\n## Sources\n\n- https://a.com")
+       "---\ntitle: A\n---\nbody\n\n## Open questions\n\n- **Trust anchor**: does DDC bootstrap trust?\n- Why does `Y` matter?\n\n## Sources\n\n- https://a.com")
     (w "content/concepts/b.md"
-       "---\ntitle: B\n---\ntext\n\n## Open questions\n- How does X scale?\n")
+       "---\ntitle: B\n---\ntext\n\n## Open questions\n- does DDC bootstrap trust?\n")
     (let [qs (reflect/open-questions dir)]
-      (is (= #{"How does X scale?" "Why does Y matter?"} (set qs)) "collects bullets, dedups across cards")
-      (is (= 2 (count qs)))
-      (is (not-any? #(str/includes? % "https://a.com") qs) "stops at the next heading"))))
+      (is (= #{"does DDC bootstrap trust?" "Why does Y matter?"} (set qs))
+          "drops the **label**: prefix + inline markdown; dedups across cards")
+      (is (not-any? #(re-find #"[*`]" %) qs) "no markdown survives")
+      (is (not-any? #(str/includes? % "https://a.com") qs) "stops at the next heading")
+      (is (= #{"content/references/a.md" "content/concepts/b.md"}
+             (get (reflect/question-sources dir) "does DDC bootstrap trust?"))
+          "aggregates every source card that raises a question"))))
