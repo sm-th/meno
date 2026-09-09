@@ -164,18 +164,7 @@
             (try (let [i (reflect/ingest-new! cfg)]
                    (when (seq i) (println "reflect: auto-ingested ->" (mapv :title i))))
                  (catch Throwable t (println "reflect ingest-new error:" (.getMessage t))))
-            (try (let [q (reflect/materialize-sources! cfg)]
-                   (when (seq q) (println "reflect: queued ingest ->" q)))
-                 (catch Throwable t (println "reflect materialize-sources error:" (.getMessage t))))
-            (try (let [c (reflect/materialize-concepts! cfg)]
-                   (when (seq c) (println "reflect: queued concepts ->" c)))
-                 (catch Throwable t (println "reflect materialize-concepts error:" (.getMessage t))))
-            (try (let [r (reflect/relink-sources! cfg)]
-                   (when (seq r) (println "reflect: relinked" (count r) "file(s)")))
-                 (catch Throwable t (println "reflect relink error:" (.getMessage t))))
-            (try (let [r (reflect/rebuild-changelog! cfg)]
-                   (when (:changed r) (println "reflect: changelog rebuilt ->" (:prs r) "PRs")))
-                 (catch Throwable t (println "reflect changelog error:" (.getMessage t))))))))
+            (reflect/reconcile! cfg)))))
     :started))
 
 (defn push-watch-loop!
@@ -194,10 +183,7 @@
                   sha (gh/main-sha cfg)]
               (when (not= sha @seen)
                 (println "reflect(push): base @" (subs (str sha) 0 (min 7 (count (str sha)))))
-                (try (reflect/materialize-sources! cfg)  (catch Throwable t (println "push materialize-sources:" (.getMessage t))))
-                (try (reflect/materialize-concepts! cfg) (catch Throwable t (println "push materialize-concepts:" (.getMessage t))))
-                (try (reflect/relink-sources! cfg)       (catch Throwable t (println "push relink:" (.getMessage t))))
-                (try (reflect/rebuild-changelog! cfg)    (catch Throwable t (println "push changelog:" (.getMessage t))))
+                (reflect/reconcile! cfg)
                 (reset! seen (try (gh/main-sha cfg) (catch Throwable _ sha)))))
             (catch Throwable t (println "push-watch error:" (.getMessage t))))
           (Thread/sleep (get-in (config/load-config) [:reflect :push-poll-ms] 20000)))))

@@ -246,17 +246,21 @@
   (let [dir    (fresh-main! cfg)
         thr    (get-in cfg [:reflect :concept-threshold] 2)
         freq   (concept-frequency dir)
-        open   (set (map #(str (get % "title")) (gh/open-issues cfg)))
+        open   (gh/open-issues cfg)
+        queued (->> open
+                    (map #(str (get % "title")))
+                    (filter #(str/starts-with? % "Add concept: "))
+                    (map #(quartz-slug (str/replace % #"^Add concept:\s*" "")))
+                    set)                       ; dedup by SLUG, robust to title casing/display
         cap    (get-in cfg [:planner :wip-cap] 10)
         budget (max 0 (- cap (count open)))
         want   (->> freq
-                    (map second)
-                    (filter (fn [{:keys [files title]}]
+                    (filter (fn [[slug {:keys [files]}]]
                               (and (>= (count files) thr)
-                                   (not (contains? open (str "Add concept: " title))))))
-                    (sort-by (fn [{:keys [files]}] (- (count files)))))
+                                   (not (contains? queued slug)))))
+                    (sort-by (fn [[_ {:keys [files]}]] (- (count files)))))
         pick   (take (min budget (get-in cfg [:reflect :max-per-run] 3)) want)]
-    (vec (for [{:keys [title files]} pick]
+    (vec (for [[_ {:keys [title files]}] pick]
            (do (file-concept-task! cfg title (sort (map #(card-link cfg dir %) files)))
                title)))))
 
@@ -481,3 +485,24 @@
       (git! dir "-c" (str "core.sshCommand=" (ssh-cmd cfg))
             "push" (str "git@github.com:" (get-in cfg [:github :repo]) ".git") "HEAD:main"))
     {:prs (count (gh/merged-prs cfg)) :changed (not= old new)}))
+
+;; --------------------------------------------------------------------------
+;; reconcile! — the merge-driven suite (materialize + relink + changelog), run
+;;   under a lock so the push watcher and the hourly loop never run it
+;;   concurrently (which double-filed concept/ingest tasks). Blog ingest is NOT
+;;   here — it stays on the timer.
+;; --------------------------------------------------------------------------
+
+(defonce ^:private recon-lock (Object.))
+
+(defn reconcile!
+  "Run the merge-driven reconciliation once, serialized. Each step is isolated so
+   one failure doesn't skip the rest. Returns a summary map."
+  [cfg]
+  (locking recon-lock
+    (let [safe (fn [label f] (try (f) (catch Throwable t
+                                        (println "reconcile" label "error:" (.getMessage t)) nil)))]
+      {:ingest    (safe :materialize-sources  #(materialize-sources! cfg))
+       :concepts  (safe :materialize-concepts #(materialize-concepts! cfg))
+       :relinked  (count (or (safe :relink    #(relink-sources! cfg)) []))
+       :changelog (safe :changelog            #(rebuild-changelog! cfg))})))
