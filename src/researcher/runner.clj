@@ -202,11 +202,56 @@
      :cache-read (sum "cacheRead") :cache-write (sum "cacheWrite")
      :calls (reduce + 0 (for [m as] (count (filter #(= "toolCall" (get % "type")) (get m "content")))))}))
 
-(defn- post-transcript!
-  "Post the omp --mode=json transcript: ONE comment per step — assistant thinking,
-   assistant prose, and each tool CALL paired with its RESULT in a SINGLE comment
-   (code block + output block). Throttled to dodge GitHub's secondary rate limit."
-  [cfg num jsonl]
+(defn- stats-md
+  "Run-stats block: model, wall time, research-session cost/tokens (omp transcript)
+   + image-side embed/llm (budget meter)."
+  [model dur-ms jsonl]
+  (let [st (run-stats jsonl) b (budget/snapshot)
+        eu (get-in b [:embed :usd] 0.0) lu (get-in b [:llm :usd] 0.0)]
+    (str "### 📊 run stats\n\n"
+         "- model: `" model "`\n"
+         "- time: " (fmt-dur dur-ms) "\n"
+         "- research session: " (format "$%.4f" (:cost st)) " · "
+         (fmt-int (:in st)) " in · " (fmt-int (:out st)) " out · "
+         (fmt-int (:cache-read st)) " cache-read · " (fmt-int (:cache-write st))
+         " cache-write · " (:calls st) " tool calls\n"
+         "- image side: embed " (fmt-int (get-in b [:embed :tokens])) " tok / "
+         (format "$%.5f" eu) " · llm " (fmt-int (get-in b [:llm :tokens])) " tok / "
+         (format "$%.5f" lu) "\n"
+         "- **total: " (format "$%.4f" (+ (:cost st) eu lu)) "**")))
+
+(defn- spoiler [summary body]
+  (str "<details><summary>" summary "</summary>\n\n" body "\n\n</details>"))
+
+(defn- squish
+  "One-line, length-capped preview for a spoiler summary."
+  [s n]
+  (let [s (str/replace (str/trim (str s)) #"\s+" " ")]
+    (if (> (count s) n) (str (subs s 0 n) "…") s)))
+
+(defn- cap
+  "Length-cap a body (keeps newlines)."
+  [s n]
+  (let [s (str s)] (if (> (count s) n) (str (subs s 0 n) "\n…(truncated)") s)))
+
+(defn- live-trace-md
+  "Tool calls so far, from the live eval trace — each collapsed under a spoiler."
+  [trace]
+  (if (empty? trace)
+    "_starting…_"
+    (str/join "\n"
+      (map-indexed
+        (fn [i {:keys [code ok? result ms]}]
+          (spoiler (str (if ok? "🔧" "❌") " " (inc i) ". <code>" (squish code 90) "</code> · " ms "ms")
+                   (str (code-fence "clojure" (str code)) "\n\n"
+                        (if ok? "✅ result" "❌ error") "\n\n"
+                        (code-fence "" (cap result 4000)))))
+        trace))))
+
+(defn- final-trace-md
+  "Full transcript from the omp json: thinking/prose inline, each tool CALL+RESULT
+   collapsed under a spoiler. Per-item caps keep the single comment under GitHub's limit."
+  [jsonl]
   (let [msgs    (->> (str/split-lines (str jsonl))
                      (keep #(try (json/read-str %) (catch Exception _ nil)))
                      (filter #(= "message_end" (get % "type")))
@@ -214,45 +259,49 @@
         results (into {} (for [m msgs :when (= "toolResult" (get m "role"))]
                            [(get m "toolCallId")
                             {:text (msg-text (get m "content")) :error? (get m "isError")}]))
-        put!    (fn [body] (try (gh/comment-issue! cfg num body) (Thread/sleep 300)
-                                (catch Throwable _ nil)))]
-    (doseq [m msgs :when (= "assistant" (get m "role"))
-            c (get m "content")]
-      (case (get c "type")
-        "thinking" (let [t (str/trim (str (or (get c "thinking") (get c "text"))))]
-                     (when (seq t) (put! (str "### 🧠 thinking\n\n" t))))
-        "text"     (let [t (str/trim (str (get c "text")))]
-                     (when (seq t) (put! (str "### 💬 assistant\n\n" t))))
-        "toolCall" (let [code (get-in c ["arguments" "code"] (json/write-str (get c "arguments")))
-                         {:keys [text error?]} (get results (get c "id"))]
-                     (put! (str "### 🔧 " (strip-tool (get c "name"))
-                                (when-let [i (get c "intent")] (str " — _" i "_")) "\n\n"
-                                (code-fence "clojure" code)
-                                "\n\n" (if error? "❌ **error**" "✅ **result**") "\n\n"
-                                (code-fence "" (or text "")))))
-        nil))))
+        parts   (for [m msgs :when (= "assistant" (get m "role")) c (get m "content")]
+                  (case (get c "type")
+                    "thinking" (let [t (str/trim (str (or (get c "thinking") (get c "text"))))]
+                                 (when (seq t) (str "🧠 " (cap t 1500))))
+                    "text"     (let [t (str/trim (str (get c "text")))]
+                                 (when (seq t) (str "💬 " (cap t 2000))))
+                    "toolCall" (let [code (get-in c ["arguments" "code"] (json/write-str (get c "arguments")))
+                                     {:keys [text error?]} (get results (get c "id"))]
+                                 (spoiler (str (if error? "❌" "🔧") " " (strip-tool (get c "name"))
+                                               (when-let [i (get c "intent")] (str " — " (squish i 90))))
+                                          (str (code-fence "clojure" code) "\n\n"
+                                               (if error? "❌ error" "✅ result") "\n\n"
+                                               (code-fence "" (cap (or text "") 2500)))))
+                    nil))
+        body    (str/join "\n\n" (remove nil? parts))]
+    (if (seq body) body "_no steps recorded._")))
 
-(defn- post-stats!
-  "Final run-stats comment: model, wall time, the research session's cost/tokens (from the
-   omp transcript) and the image-side embed/llm cost (from the budget meter)."
-  [cfg num model dur-ms jsonl]
-  (let [st (run-stats jsonl)
-        b  (budget/snapshot)
-        eu (get-in b [:embed :usd] 0.0)
-        lu (get-in b [:llm :usd] 0.0)]
-    (try (gh/comment-issue! cfg num
-           (str "### 📊 run stats\n\n"
-                "- model: `" model "`\n"
-                "- time: " (fmt-dur dur-ms) "\n"
-                "- research session: " (format "$%.4f" (:cost st)) " · "
-                (fmt-int (:in st)) " in · " (fmt-int (:out st)) " out · "
-                (fmt-int (:cache-read st)) " cache-read · " (fmt-int (:cache-write st))
-                " cache-write · " (:calls st) " tool calls\n"
-                "- image side: embed " (fmt-int (get-in b [:embed :tokens])) " tok / "
-                (format "$%.5f" eu) " · llm " (fmt-int (get-in b [:llm :tokens])) " tok / "
-                (format "$%.5f" lu) "\n"
-                "- **total: " (format "$%.4f" (+ (:cost st) eu lu)) "**"))
-         (catch Throwable _ nil))))
+(defn- status-md
+  "The single, continuously-updated status comment. phase ∈ #{:running :done}."
+  [{:keys [stage model phase dur-ms trace jsonl result]}]
+  (let [banner (cond (:pr result)       (str "✅ done · PR " (:pr result))
+                     (:error result)    (str "❌ push/PR failed: " (:error result))
+                     (:no-write result) "ⓘ done · nothing written (no card changed)"
+                     (= :done phase)    "✅ done"
+                     :else              "⏳ running…")]
+    (str "## " (if (= :done phase) "✅" "⏳") " " stage " — " (if (= :done phase) "done" "running") "\n"
+         "model `" model "`" (when dur-ms (str " · " (fmt-dur dur-ms))) "\n\n"
+         banner "\n\n"
+         (when (= :done phase) (str (work-summary) "\n\n"))
+         "### 🔎 trace\n\n"
+         (if (= :done phase) (final-trace-md jsonl) (live-trace-md trace))
+         (when (and (= :done phase) jsonl) (str "\n\n" (stats-md model dur-ms jsonl))))))
+
+(defn- upsert-comment!
+  "Create the status comment once, then edit it in place; id stored in cid-atom.
+   Truncates to stay under GitHub's ~65 KB comment limit."
+  [cfg num cid-atom body]
+  (let [body (cap body 64000)]
+    (try
+      (if-let [id @cid-atom]
+        (gh/update-comment! cfg id body)
+        (reset! cid-atom (get (gh/comment-issue! cfg num body) "id")))
+      (catch Throwable _ nil))))
 
 (defn run-issue
   "Run one issue under its role: load the role meta as the system prompt, spawn
@@ -283,20 +332,27 @@
                                  (get-in cfg [:projects :in-progress-status] "In Progress"))
            (catch Throwable _ nil)))
     (try
-      (when num (try (gh/comment-issue! cfg num
-                       (str "▶️ **" (:stage spec) "** started · model `"
-                            (or (:model spec) (get-in cfg [:omp :model])) "`"))
-                     (catch Throwable _ nil)))
-      (let [t0  (System/currentTimeMillis)
+      (let [cid    (atom nil)
+            done?  (atom false)
+            model  (or (:model spec) (get-in cfg [:omp :model]))
+            render (fn [m] (when num (upsert-comment! cfg num cid (status-md (merge {:stage (:stage spec) :model model} m)))))
+            _       (render {:phase :running :trace @task/trace})
+            watcher (when num
+                      (future (try (while (not @done?)
+                                     (Thread/sleep 8000)
+                                     (when-not @done? (render {:phase :running :trace @task/trace})))
+                                   (catch Throwable _ nil))))
+            t0  (System/currentTimeMillis)
             {:keys [exit out err]}
             (sh "omp" "-p" "--no-tools" "--no-session" "--no-title"
                 "--mode=json" "--print-thoughts"
-                "--model" (or (:model spec) (get-in cfg [:omp :model])) "--cwd" tmp
+                "--model" model "--cwd" tmp
                 "--system-prompt" system "--" prompt)
             dur (- (System/currentTimeMillis) t0)
-            _ (do (println "=== omp" (name role) "exit" exit "===")
-                  (when (seq err) (println "--- stderr ---\n" err)))
-            _ (when num (post-transcript! cfg num out))
+            _   (reset! done? true)
+            _   (when watcher (future-cancel watcher))
+            _   (do (println "=== omp" (name role) "exit" exit "===")
+                    (when (seq err) (println "--- stderr ---\n" err)))
             result (cond
                      (and writes? (wiki/ahead? repo base branch))
                      (try
@@ -309,14 +365,7 @@
                      writes? {:issue num :no-write true}
                      :else   {:issue num :done true})]
         (budget/report)
-        (when num
-          (try (gh/comment-issue! cfg num
-                 (cond (:pr result)       (str "✅ done · PR " (:pr result) "\n\n" (work-summary))
-                       (:error result)    (str "❌ push/PR failed: " (:error result))
-                       (:no-write result) "ⓘ nothing written (no card changed)"
-                       :else              (str "✅ done\n\n" (work-summary))))
-               (catch Throwable _ nil)))
-        (when num (post-stats! cfg num (or (:model spec) (get-in cfg [:omp :model])) dur out))
+        (render {:phase :done :dur-ms dur :jsonl out :result result})
         ;; GUARANTEED terminal transition off "In Progress" on EVERY finish path
         ;; (PR opened, nothing written, or push/PR error) so no card ever lingers there.
         (when (and num (:item-id issue))
