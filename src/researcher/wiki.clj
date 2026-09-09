@@ -82,14 +82,18 @@
 (defn put-page!
   "Write/overwrite a card on the writer's branch and commit. Returns page meta."
   [{:keys [cfg repo branch] :as w} page]
-  (let [slug (slugify (:title page))
-        rel  (card-rel (:type page) slug
-                       (when (= :reference (:type page)) (domain-of (:url page))))
+  (let [slug (slugify (:title page))            ; base title -> slug: keeps [[Title]] links resolving
+        dom  (when (= :reference (:type page)) (domain-of (:url page)))
+        disp (if (and (seq (str dom)) (not= dom "unknown")
+                      (not (str/includes? (str/lower-case (str (:title page))) (str dom))))
+               (str (:title page) " (" dom ")")   ; display title shows provenance
+               (:title page))
+        rel  (card-rel (:type page) slug dom)
         name  (get-in cfg [:wiki :author-name]  "smith-wiki-bot")
         email (get-in cfg [:wiki :author-email] "bot@smith.wiki")]
     (ensure-branch! w)
     (io/make-parents (io/file repo rel))
-    (spit (str repo "/" rel) (render page))
+    (spit (str repo "/" rel) (render (assoc page :title disp)))
     (git! repo "add" rel)
     (git! repo
           "-c" (str "user.name=" name)
