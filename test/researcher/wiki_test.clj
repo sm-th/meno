@@ -33,3 +33,13 @@
                          :seed "https://andysmith.ai/x"})]
     (is (str/includes? md "type: connection"))
     (is (str/includes? md "seed: https://andysmith.ai/x"))))
+
+(deftest domain-of-cases
+  (is (= "reproducible-builds.org" (wiki/domain-of "https://www.Reproducible-Builds.org/docs/")))
+  (is (= "andysmith.ai" (wiki/domain-of "https://andysmith.ai/2026/x")))
+  (is (= "unknown" (wiki/domain-of nil))))
+
+(deftest reference-nests-under-domain
+  (is (= "content/references/andysmith.ai/ephemeral-agents.md"
+         (wiki/card-rel :reference "ephemeral-agents" "andysmith.ai")))
+  (is (= "content/concepts/x.md" (wiki/card-rel :concept "x" nil)) "non-references stay flat"))

@@ -16,7 +16,8 @@
             [researcher.runner :as runner]
             [researcher.task :as task]
             [researcher.process :as process]
-            [researcher.index :as index])
+            [researcher.index :as index]
+            [researcher.reflect :as reflect])
   (:import (com.sun.net.httpserver HttpServer HttpHandler HttpExchange)
            (java.net InetSocketAddress))
   (:gen-class))
@@ -105,6 +106,7 @@
 
 (def ^:private orchestrator (atom nil))
 (def ^:private active (atom #{}))       ; issue numbers currently running
+(def ^:private reflector (atom nil))
 
 (defn start-loop!
   "Background orchestrator: poll the board and run approved (Todo) issues, up to
@@ -142,7 +144,27 @@
             (Thread/sleep (get-in cfg [:orchestrator :poll-ms] 15000))))))
     :started))
 
-(defn stop-loop! [] (reset! orchestrator nil) :stopped)
+(defn stop-loop! [] (reset! orchestrator nil) (reset! reflector nil) :stopped)
+
+(defn reflect-loop!
+  "Scheduled reconciliation, independent of the Todo queue: every :reflect :interval-ms
+   run materialize-sources! (recurring bare URLs -> ingest tasks) then relink-sources!
+   (bare URLs that now have a card -> [[reference]], pushed to main)."
+  []
+  (when-not @reflector
+    (reset! reflector true)
+    (future
+      (while @reflector
+        (let [cfg (config/load-config)]
+          (Thread/sleep (get-in cfg [:reflect :interval-ms] 3600000))
+          (when @reflector
+            (try (let [q (reflect/materialize-sources! cfg)]
+                   (when (seq q) (println "reflect: queued ingest ->" q)))
+                 (catch Throwable t (println "reflect materialize error:" (.getMessage t))))
+            (try (let [r (reflect/relink-sources! cfg)]
+                   (when (seq r) (println "reflect: relinked" (count r) "file(s)")))
+                 (catch Throwable t (println "reflect relink error:" (.getMessage t))))))))
+    :started))
 
 (defn -main [& _]
   (let [cfg   (config/load-config)
@@ -160,5 +182,6 @@
                   "/mcp/{" (str/join "," (map name roles)) "} | nrepl " host ":" nport))
     (try (index/sync-tasks! cfg) (catch Throwable _ nil))
     (start-loop!)
+    (reflect-loop!)
     (flush)
     (clojure.main/repl :prompt #(do (print "image=> ") (flush)))))
