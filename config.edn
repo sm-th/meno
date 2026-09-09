@@ -4,7 +4,7 @@
  :wiki {:root "~/sm-th/smith-wiki"
         :content "content"
         :base "main"        ; branch the worker forks pages from and PRs into
-        :conventions "meta/conventions"  ; the meta card holding the card contract
+        :site "https://smith.wiki"       ; published Quartz site — for card links in issue bodies
         :author-name "Agent Smith"       ; agent's wiki commits are authored as
         :author-email "agent@smith.wiki"
         :concept-body-max 900}           ; hard cap: a concept card body is a SHORT definition

@@ -22,11 +22,6 @@
     {:score (get h "score") :kind (get p "kind") :title (get p "title")
      :number (get p "number") :url (get p "url") :source (get p "source")}))
 
-(defn- conventions-url [cfg]
-  (str "https://github.com/" (get-in cfg [:github :repo])
-       "/blob/" (get-in cfg [:wiki :base] "main")
-       "/content/" (get-in cfg [:wiki :conventions] "conventions") ".md"))
-
 (defn- concept-body
   "Body for an `Add concept: X` task — only what is SPECIFIC to the source that
    raised it: Context (why/how it frames the concept), verbatim Quotes, Angle.

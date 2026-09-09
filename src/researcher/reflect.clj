@@ -95,6 +95,28 @@
                       acc (extract-urls (slurp f)))))
           {} (content-files dir)))
 
+(defn quartz-slug
+  "Replicate Quartz's slugifyPath to build a card's public URL: per path segment,
+   whitespace->'-', &->'-and-', %->'-percent', drop ?#<>:\"|*, then lowercase."
+  [s]
+  (->> (str/split (str s) #"/")
+       (map (fn [seg]
+              (-> seg
+                  (str/replace #"\s" "-")
+                  (str/replace #"&" "-and-")
+                  (str/replace #"%" "-percent")
+                  (str/replace #"[?#<>:\"|*]" "")
+                  str/lower-case)))
+       (str/join "/")))
+
+(defn- wiki-url [cfg rel]
+  (str (get-in cfg [:wiki :site] "https://smith.wiki") "/"
+       (quartz-slug (-> rel (str/replace #"^content/" "") (str/replace #"\.md$" "")))))
+
+(defn- card-link [cfg dir rel]
+  (let [title (or (fm-field (slurp (io/file dir rel)) "title") rel)]
+    (str "[" title "](" (wiki-url cfg rel) ")")))
+
 ;; --------------------------------------------------------------------------
 ;; job 1: materialize — recurring bare URLs -> ingest tasks
 ;; --------------------------------------------------------------------------
@@ -120,7 +142,8 @@
         pick  (take (min budget (get-in cfg [:reflect :max-per-run] 3)) want)]
     (vec (for [u pick]
            (do (runner/file-ingest-task!
-                 cfg u (str "Auto-queued by reflect: cited in " (count (freq u)) " notes."))
+                 cfg u (str "Auto-queued by reflect — cited in these cards: "
+                            (str/join ", " (map #(card-link cfg dir %) (sort (get freq u)))) "."))
                u)))))
 
 ;; --------------------------------------------------------------------------
