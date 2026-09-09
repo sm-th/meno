@@ -182,11 +182,12 @@
        "recorded as ONE long-form research report card.\n\n"
        "Input is ONE task: a research QUESTION, with a proposal (why it matters, hypotheses, and a "
        "plan to follow — drafted by the planning stage). Execute the plan: investigate and write ONE "
-       "research card TITLED by the question verbatim, in content/research/. Revise any hypothesis "
+       "research card TITLED by the question itself (the topic — NOT the task's `Research:` prefix), "
+       "in content/research/. Revise any hypothesis "
        "the evidence rejects. Unlike a concept card (a short definition) or an answer card (a single "
        "claim), this is the WHOLE cycle written up for a reader: why the question matters, what the "
        "literature says, and what you conclude.\n\n"
-       "THE REPORT — (put-research! {:title \"<the question, verbatim>\" :tags [...] "
+       "THE REPORT — (put-research! {:title \"<the question itself, no `Research:` prefix>\" :tags [...] "
        ":body \"<Markdown>\" :sources [<bare urls you fetched>]}), with these sections in order:\n"
        "## Question — the question restated precisely, and its scope.\n"
        "## Why it matters — the motivation: which wiki concepts it touches and why it is worth "
@@ -217,35 +218,41 @@
        "a strong source that deserves its own literature note. Then stop."))
 
 ;; ---------------------------------------------------------------------------
-;; PLAN (curate) — the research lead: choose the next question and draft a
-;;                 grounded research proposal (best-practice planning)
+;; PLAN (curate) — the research lead: pick the next question and draft a grounded
+;;                 proposal, via named methods (FINER + PCC + Strong Inference + PRISMA-P)
 ;; ---------------------------------------------------------------------------
 
 (def curate-system
-  (str "STAGE: PLAN.  PRACTICE: research-lead planning — scope a question, ground it in a quick scan "
-       "of the landscape, and draft a proposal a researcher can execute.\n\n"
+  (str "STAGE: PLAN.  PRACTICE: research-lead planning grounded in named methods — FINER question "
+       "selection (Cummings), PCC scoping (Population/Concept/Context, JBI), Strong Inference "
+       "(Platt 1964: multiple competing hypotheses + crucial tests), and a PRISMA-P-style survey "
+       "protocol. You SCOPE and PLAN; you do NOT answer.\n\n"
        "Input is a NUMBERED list of OPEN questions surfaced across the wiki (with how many cards "
-       "raised each). Do TWO things, then STOP:\n"
-       "1. SELECT the single question most worth researching NOW — highest-leverage: it advances the "
-       "wiki's core themes, is genuinely open and non-obvious, and its answer unlocks or connects "
-       "many ideas. Use (central) and (recall) to weigh what the wiki already knows, and a few "
-       "(search)/(fetch) probes to sense whether a question is tractable and where the live debate is.\n"
-       "2. Draft a concise, GROUNDED research proposal for it — the plan, NOT the answer. Do not "
-       "resolve the question; frame how to resolve it.\n\n"
-       "PROCEDURE:\n"
-       "- (recall <q> 8) and (central 12) — what the wiki already knows / its core concepts.\n"
-       "- a few (search)/(fetch) probes — scan prior art and the current debate to ground the "
-       "motivation, sharpen the hypotheses, and name concrete leads. A snippet is a lead, not "
-       "evidence; you are scoping, not answering.\n"
-       "- then (submit-plan! {:n <the number> :proposal \"<Markdown>\"}) exactly once, then stop.\n\n"
-       "The proposal Markdown, these sections in order:\n"
-       "## Why & what for — why this matters and what answering it unlocks; the wiki concepts and "
-       "tensions it touches (as [[Canonical name]] wikilinks).\n"
-       "## Hypotheses — 1–3 candidate answers or positions worth testing (or 'open — no prior "
-       "commitment' if genuinely exploratory).\n"
-       "## Plan — how to investigate: the angles to pursue, the kinds of sources to survey (prefer "
-       "primary), concrete leads found while scoping (as bare URLs), and what a strong, well-grounded "
-       "answer would have to establish."))
+       "raised each). Ground yourself FIRST — (central 12) and (recall <q> 8) for what the wiki "
+       "already knows, then a FEW (search)/(fetch) probes to sense the live debate and prior art (a "
+       "snippet is a lead, not evidence — you are scoping, not answering). Then do TWO things, then "
+       "STOP:\n\n"
+       "1. SELECT the single best question by FINER: Feasible (answerable from public literature at "
+       "reasonable depth), Interesting, Novel (not already covered by a card), Ethical (public "
+       "sources only), Relevant (advances the wiki's central concepts / resolves a live tension). "
+       "Among feasible+relevant ones, prefer the highest-leverage — whose answer unlocks or connects "
+       "the most.\n"
+       "2. (submit-plan! {:n <the number> :proposal \"<Markdown>\"}) exactly once. The proposal is a "
+       "research protocol, these sections in order:\n\n"
+       "## Why & what for — FINER rationale: why it matters, what answering it unlocks, and the wiki "
+       "concepts / tensions it touches (as [[Canonical name]] wikilinks).\n"
+       "## Question (PCC) — the question scoped as Population / Concept / Context: the bodies of work "
+       "or systems in view (Population), the exact concept or relationship under study (Concept), and "
+       "the setting/boundary that keeps it answerable (Context).\n"
+       "## Hypotheses (Strong Inference) — 2–3 MUTUALLY COMPETING candidate answers, framed so "
+       "evidence can discriminate between them (or 'open — no prior commitment' only if genuinely "
+       "exploratory). For each, name the crucial test or observation that would EXCLUDE it.\n"
+       "## Plan (PRISMA-P) — the survey protocol drafted BEFORE doing it: the angles / sub-questions, "
+       "the source types and where to look (prefer primary), concrete leads found while scoping (as "
+       "bare URLs), the inclusion/exclusion criteria for what counts as evidence, and what a strong, "
+       "well-grounded answer would have to establish (and exclude) to settle the hypotheses.\n\n"
+       "Name the method inline where it drives a choice. Do NOT resolve the question — frame how to "
+       "resolve it."))
 
 ;; ---------------------------------------------------------------------------
 ;; stages — the process as DATA. role key -> stage spec. Add/replace a stage
@@ -281,7 +288,7 @@
 
    :curate
    {:stage    "PLAN"
-    :practice "research-lead planning — grounded question selection + proposal (why / hypotheses / plan)"
+    :practice "FINER-selected + PCC-scoped question, Strong-Inference competing hypotheses, PRISMA-P survey protocol"
     :writes?  false
     :tools    ["recall" "search" "fetch" "central" "reference-frequency" "open-tasks" "submit-plan!"]
     :model    "opencode-go/deepseek-v4-pro"

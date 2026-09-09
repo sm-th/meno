@@ -314,11 +314,12 @@
        set))
 
 (defn- research-issue-titles
-  "Titles of OPEN research issues (task filed, card not yet on main)."
+  "Questions of OPEN research issues (task filed, card not yet on main) — the `Research: `
+   task prefix stripped so they compare against the raw pool questions."
   [cfg]
   (->> (gh/open-issues cfg)
        (filter (fn [i] (some #(= "type:research" (get % "name")) (get i "labels"))))
-       (map #(str/trim (str (get % "title"))))
+       (map #(-> (str (get % "title")) (str/replace #"(?i)^\s*research:\s*" "") str/trim))
        set))
 
 (defn- open-research-pr?
@@ -345,7 +346,7 @@
                               pool))))
 
 (defn- file-research-task! [cfg question proposal links]
-  (let [issue (gh/create-issue cfg {:title  question
+  (let [issue (gh/create-issue cfg {:title  (str "Research: " question)
                                     :labels ["type:research" "role:report"]
                                     :body   (str "## Question\n\n" question "\n\n"
                                                  (str/trim (str proposal)) "\n\n"
