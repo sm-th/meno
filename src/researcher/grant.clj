@@ -22,41 +22,6 @@
     {:score (get h "score") :kind (get p "kind") :title (get p "title")
      :number (get p "number") :url (get p "url") :source (get p "source")}))
 
-(defn- ref-body
-  "Body for an `Ingest: <url>` task — a source worth READ+ingest. Same Source/Context
-   shape as a hand-filed ingest task, plus the stage line."
-  [{:keys [url seed_note context rationale why]}]
-  (let [src (str/trim (str (or url seed_note)))
-        ctx (str/trim (str (or context rationale why)))]
-    (str "## Source\n\n" src "\n\n"
-         "## Context\n\n"
-         (if (str/blank? ctx) "_(none given — judge from the page itself)_" ctx) "\n\n"
-         (process/practice-ref :ingest))))
-
-(defn- file-task!
-  "Create ONE Backlog task (or, under dry?, print it). type/role set the labels;
-   index-text feeds the dedup embedding. Enforces the WIP cap live in code."
-  [cfg dry? {:keys [title type role body index-text]}]
-  (let [labels [(str "type:" (name type)) (str "role:" (name role))]]
-    (if dry?
-      (do (println (str "\n===== DRY " (name type) " task =====\nTITLE: " title
-                        "\nLABELS: " (str/join " " labels)
-                        "\n----- BODY -----\n" body
-                        "\n=============================="))
-          (flush)
-          {:filed :dry :title title})
-      (let [open (count (gh/open-issues cfg))
-            cap  (get-in cfg [:planner :wip-cap])]
-        (if (>= open cap)
-          {:refused (str "queue full: " open "/" cap " open issues — triage first")}
-          (let [issue (gh/create-issue cfg {:title title :body body :labels labels})]
-            (when-let [p (projects/find-project cfg)]
-              (projects/add-to-backlog! cfg (get p "id") (get issue "node_id")))
-            (try (index/index-task! cfg {:number (get issue "number") :title title
-                                         :rationale (str index-text) :url (get issue "html_url")})
-                 (catch Throwable _ nil))
-            {:filed (get issue "number") :title title}))))))
-
 (def ^:private tool-docs
   {"recall" "(recall q [k]) — semantic search across the corpus and existing cards"
    "fetch" "(fetch url) — readable text of an external web page (also cites it)"
@@ -65,7 +30,6 @@
    "reference-frequency" "(reference-frequency) — most-cited source URLs"
    "open-tasks" "(open-tasks) — [{:number :title}] tasks already queued"
    "submit-plan!" "(submit-plan! {:n :proposal}) — pick open question #n and submit your research proposal (Markdown); ends the planning run"
-   "propose-reference!" "(propose-reference! {:url :context}) — file a task to READ+ingest a source into a reference card"
    "enrich-task!" "(enrich-task! n md) — append a note to an open task"
    "put-concept!" "(put-concept! {:title :description :tags :body :sources}) — write the canonical concept card"
    "put-connection!" "(put-connection! {:title :tags :body :seed :sources}) — write a connection card"
@@ -94,15 +58,6 @@
                                    (gh/open-issues cfg)))
          "submit-plan!" (fn [m] (reset! task/plan {:n (:n m) :proposal (str (:proposal m))}) {:submitted (:n m)})
          "put-research!"   (when w (fn [page] (if dry? (do (println (str "\n===== DRY put-research! -> " (wiki/card-rel :research (:title page)) " =====\n" (wiki/render (assoc page :type :research)) "\n==============================")) (flush) {:dry :research :title (:title page)}) (wiki/put-page! w (assoc page :type :research)))))
-         "propose-reference!"
-         (fn [m]
-           (let [url (str/trim (str (or (:url m) (:seed_note m))))]
-             (if (str/blank? url)
-               {:refused "a reference task needs a :url to ingest"}
-               (file-task! cfg dry? {:title (str "Ingest: " url)
-                                     :type :reference :role :ingest
-                                     :body (ref-body m)
-                                     :index-text (str url " " (or (:context m) (:rationale m)))}))))
          "enrich-task!" (if dry?
                           (fn [n _] {:enriched :dry :number n})
                           (fn [n add]

@@ -67,8 +67,9 @@
        "questions` section as ONE plain question sentence per bullet (a real question — no markdown, "
        "no bold label prefix; a periodic job curates the most interesting into a research task). Do "
        "NOT file research tasks yourself.\n"
-       "- Another SOURCE the note itself cites/links, worth reading in full -> (propose-reference! "
-       "{:url \"<url>\" :context \"why it's worth a full literature note / what to look for\"}).\n\n"
+       "- Any OTHER source the note cites, keep as its bare external URL in the card's ## Sources — "
+       "do NOT file a task for it; a periodic job promotes a source to its own reference card once it "
+       "recurs across notes.\n\n"
        "DEDUP: (recall <x> 8) finds existing cards AND open tasks; (open-tasks) lists the queue. If an "
        "open task already covers it, DON'T duplicate — (enrich-task! N \"the new quote / angle from "
        "this source\") so mentions accumulate on ONE task. If a card exists, skip UNLESS this source "
@@ -115,9 +116,8 @@
        "- A genuinely NEW open question worth researching -> leave it as ONE plain question sentence "
        "in a `## Open questions` bullet (a real question — no markdown, no bold label prefix; a "
        "periodic job curates it into a research task). Do NOT file research tasks yourself.\n"
-       "- A source you FETCHED and READ and judged STRONG (foundational; deserves its own full "
-       "reference card) -> (propose-reference! {:url \"...\" :context \"what you read and why it's "
-       "worth a full literature note\"}). NEVER propose a URL you did not read.\n\n"
+       "- Cite any source you used as its bare external URL under ## Sources — do NOT file a task for "
+       "it; a periodic job promotes a recurring source to its own reference card.\n\n"
        "PROCEDURE:\n"
        "1. (recall <subject> 8) — existing cards + related corpus; neither duplicate nor contradict. "
        "If the concept card ALREADY EXISTS, read it and IMPROVE it (correct, tighten, fold in a "
@@ -133,9 +133,8 @@
        "4. WRITE with put-concept! (it OVERWRITES an existing card — "
        "the PR shows the diff for review). If it returns {:rejected}, the body is too long — shorten "
        "and push depth into [[links]].\n"
-       "5. Leave [[Canonical|short]] links for related concepts (a periodic job queues the recurring "
-       "ones); propose-reference! for a strong source that deserves its own reference card. "
-       "Then stop."))
+       "5. Leave [[Canonical|short]] links for related concepts, and bare-URL ## Sources for what you "
+       "read (a periodic job promotes the recurring ones). Then stop."))
 
 ;; ---------------------------------------------------------------------------
 ;; check-zettel rubric — a recursive omp Zettelkasten editor over a draft card
@@ -189,6 +188,8 @@
        "literature says, and what you conclude.\n\n"
        "THE REPORT — (put-research! {:title \"<the question itself, no `Research:` prefix>\" :tags [...] "
        ":body \"<Markdown>\" :sources [<bare urls you fetched>]}), with these sections in order:\n"
+       "## TL;DR — 2–4 sentences at the very top: the bottom-line answer/finding for a reader who "
+       "skims. Write it LAST, distilled from Findings.\n"
        "## Question — the question restated precisely, and its scope.\n"
        "## Why it matters — the motivation: which wiki concepts it touches and why it is worth "
        "researching now. Link those concepts as [[Canonical name]] wikilinks.\n"
@@ -198,8 +199,9 @@
        "## Findings — your conclusion, Toulmin-structured: the claim + its grounds (cited evidence) + "
        "a qualifier (how strongly / under what conditions it holds) + known rebuttals. Objective; "
        "synthesise, do not just list.\n"
-       "## Open sub-questions — questions this research opened but did not close, as plain bullets (a "
-       "periodic job curates the most interesting into their own research tasks). NOT tasks.\n\n"
+       "## Open questions — questions this research opened but did not close, as plain question "
+       "sentences (a real question per bullet, no markdown). Use EXACTLY this heading — the curator "
+       "scans `## Open questions`, so they re-enter the pool and seed new research. NOT tasks.\n\n"
        "CONTRACT:\n"
        "- [[wikilinks]] point to CONCEPT cards only (bare [[Canonical name|short]]); a dangling link "
        "is the frontier, materialised later. A SOURCE is ALWAYS a bare external URL, NEVER a "
@@ -214,8 +216,8 @@
        "3. LITERATURE — (search) finds candidates; (fetch) and READ at least 3 authoritative sources "
        "(prefer primary). A snippet is not reading.\n"
        "4. DRAFT -> (check-zettel {:type :research :title \"…\" :body \"…\"}); revise until OK.\n"
-       "5. WRITE with put-research!. Leave [[concept]] links for the frontier; propose-reference! for "
-       "a strong source that deserves its own literature note. Then stop."))
+       "5. WRITE with put-research!. Leave [[concept]] links for the frontier; cite every source as "
+       "its bare external URL under ## Sources (a periodic job promotes recurring ones). Then stop."))
 
 ;; ---------------------------------------------------------------------------
 ;; PLAN (curate) — the research lead: pick the next question and draft a grounded
@@ -264,7 +266,7 @@
    {:stage    "READ"
     :practice "Adler analytical reading + Zettelkasten literature note"
     :writes?  true
-    :tools    ["recall" "fetch" "open-tasks" "enrich-task!" "propose-reference!" "put-reference!"]
+    :tools    ["recall" "fetch" "open-tasks" "enrich-task!" "put-reference!"]
     :model    "opencode-go/deepseek-v4-pro"
     :system   read-system}
 
@@ -273,7 +275,7 @@
     :practice "scientific inquiry + syntopical reading + STORM/PRISMA + Toulmin + Zettelkasten permanent note"
     :writes?  true
     :tools    ["recall" "search" "fetch" "central" "reference-frequency" "open-tasks"
-               "check-zettel" "put-concept!" "propose-reference!"]
+               "check-zettel" "put-concept!"]
     :model    "opencode-go/deepseek-v4-pro"
     :system   investigate-system}
 
@@ -282,7 +284,7 @@
     :practice "full research cycle — framing + syntopical reading + STORM/PRISMA cited survey + Toulmin findings, written as one long-form report"
     :writes?  true
     :tools    ["recall" "search" "fetch" "central" "reference-frequency" "open-tasks"
-               "check-zettel" "put-research!" "propose-reference!"]
+               "check-zettel" "put-research!"]
     :model    "opencode-go/deepseek-v4-pro"
     :system   research-system}
 

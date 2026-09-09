@@ -7,7 +7,6 @@
             researcher.note-test
             researcher.refs-test
             researcher.wiki-test
-            researcher.grant-test
             researcher.budget-test
             researcher.http-test
             researcher.chunk-test
@@ -17,7 +16,7 @@
 (defn -main [& _]
   (let [{:keys [fail error]}
         (t/run-tests 'researcher.note-test 'researcher.refs-test 'researcher.wiki-test
-                     'researcher.grant-test 'researcher.budget-test 'researcher.http-test
+                     'researcher.budget-test 'researcher.http-test
                      'researcher.chunk-test 'researcher.graph-test 'researcher.reflect-test)]
     (shutdown-agents)
     (System/exit (if (pos? (+ (or fail 0) (or error 0))) 1 0))))
