@@ -134,3 +134,32 @@
     (if (= 200 (:status resp))
       (:body resp)
       (throw (ex-info "github update-issue failed" resp)))))
+
+(defn merged-prs
+  "Merged PRs, newest first: [{:number :title :url :sha :merged-at}]. Scans the most
+   recent closed PRs (bounded) and keeps only merged ones."
+  [cfg]
+  (let [{:keys [status body]}
+        (http/json-request {:method :get
+                            :url (str api "/repos/" (repo cfg)
+                                      "/pulls?state=closed&sort=updated&direction=desc&per_page=100")
+                            :headers (H cfg)})]
+    (if (= 200 status)
+      (->> body
+           (filter #(get % "merged_at"))
+           (map (fn [p] {:number (get p "number") :title (get p "title")
+                         :url (get p "html_url") :sha (get p "merge_commit_sha")
+                         :merged-at (get p "merged_at")}))
+           (sort-by :merged-at) reverse vec)
+      (throw (ex-info "github merged-prs failed" {:status status :body body})))))
+
+(defn pr-files
+  "Files a PR changed: [{:path :status}], status ∈ added|modified|removed|renamed."
+  [cfg number]
+  (let [{:keys [status body]}
+        (http/json-request {:method :get
+                            :url (str api "/repos/" (repo cfg) "/pulls/" number "/files?per_page=100")
+                            :headers (H cfg)})]
+    (if (= 200 status)
+      (mapv (fn [f] {:path (get f "filename") :status (get f "status")}) body)
+      (throw (ex-info "github pr-files failed" {:status status :body body})))))

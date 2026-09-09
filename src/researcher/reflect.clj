@@ -429,3 +429,55 @@
                   {:dry :research :chosen q :proposal proposal :pool (count pool)}
                   {:filed (file-research-task! cfg q proposal links)
                    :title q :pool (count pool)})))))))))
+
+;; --------------------------------------------------------------------------
+;; job 5: rebuild-changelog — the accepted-PR audit trail. Regenerate
+;;        content/changelog.md from the merged-PR history (PR -> pages it
+;;        created/edited/deleted, with links + merge SHA), push to main when it
+;;        changed. Cheap (no LLM); the history a human uses to review auto-merge
+;;        and to roll back (revert the PR on GitHub).
+;; --------------------------------------------------------------------------
+
+(defn- clean-title [s] (str/replace (str s) #"[\[\]]" ""))
+
+(defn- changelog-file-line [cfg dir {:keys [path status]}]
+  (let [tag (case status "added" "🟢 new" "removed" "🔴 deleted" "renamed" "🔵 renamed" "🟡 edited")
+        f   (io/file dir path)
+        ttl (or (when (.exists f) (fm-field (slurp f) "title"))
+                (-> path (str/replace #"^content/" "") (str/replace #"\.md$" "")))]
+    (if (= status "removed")
+      (str "- " tag " `" path "`")
+      (str "- " tag " [" (clean-title ttl) "](" (wiki-url cfg path) ")"))))
+
+(defn- changelog-md [cfg dir prs]
+  (str "---\ntitle: Changelog\n---\n\n"
+       "_Auto-generated from GitHub — every accepted PR and the pages it created, edited or "
+       "deleted, newest first. Roll back a change by reverting its PR on GitHub._\n\n"
+       (str/join "\n\n"
+         (for [{:keys [number title url sha merged-at]} prs]
+           (str "### [#" number " " (clean-title title) "](" url ")\n"
+                "merged " (subs (str merged-at) 0 10)
+                (when (seq (str sha)) (str " · `" (subs (str sha) 0 (min 7 (count (str sha)))) "`")) "\n\n"
+                (let [fs (->> (try (gh/pr-files cfg number) (catch Throwable _ []))
+                              (filter #(str/ends-with? (str (:path %)) ".md")))]
+                  (if (seq fs)
+                    (str/join "\n" (map #(changelog-file-line cfg dir %) fs))
+                    "_no page changes_")))))
+       "\n"))
+
+(defn rebuild-changelog!
+  "Regenerate content/changelog.md from the merged-PR history; commit+push to main
+   only when it changed. Returns {:prs n :changed bool}."
+  [cfg]
+  (let [dir (fresh-main! cfg)
+        f   (io/file dir "content/changelog.md")
+        old (when (.exists f) (slurp f))
+        new (changelog-md cfg dir (gh/merged-prs cfg))]
+    (when (not= old new)
+      (spit f new)
+      (git! dir "add" "-A")
+      (git! dir "-c" "user.name=smith-wiki-bot" "-c" "user.email=bot@smith.wiki"
+            "-c" "commit.gpgsign=false" "commit" "-m" "reflect: rebuild changelog")
+      (git! dir "-c" (str "core.sshCommand=" (ssh-cmd cfg))
+            "push" (str "git@github.com:" (get-in cfg [:github :repo]) ".git") "HEAD:main"))
+    {:prs (count (gh/merged-prs cfg)) :changed (not= old new)}))

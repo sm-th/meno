@@ -170,7 +170,10 @@
                  (catch Throwable t (println "reflect materialize-concepts error:" (.getMessage t))))
             (try (let [r (reflect/relink-sources! cfg)]
                    (when (seq r) (println "reflect: relinked" (count r) "file(s)")))
-                 (catch Throwable t (println "reflect relink error:" (.getMessage t))))))))
+                 (catch Throwable t (println "reflect relink error:" (.getMessage t))))
+            (try (let [r (reflect/rebuild-changelog! cfg)]
+                   (when (:changed r) (println "reflect: changelog rebuilt ->" (:prs r) "PRs")))
+                 (catch Throwable t (println "reflect changelog error:" (.getMessage t))))))))
     :started))
 
 (defn -main [& _]
