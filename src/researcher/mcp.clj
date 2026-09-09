@@ -87,7 +87,7 @@
 
 (defn dry!
   "Global preview switch: (dry! true) makes every side-effecting tool PRINT what it
-   would do (full issue title+body for propose-concept!) instead of touching GitHub/the
+   would do (full issue title+body for propose-research!) instead of touching GitHub/the
    wiki, so a whole stage runs through the REAL pipeline and is watched on screen.
    (dry! false) turns it off."
   [on?] (reset! task/dry (boolean on?)) {:dry @task/dry})
@@ -148,8 +148,9 @@
 
 (defn reflect-loop!
   "Scheduled reconciliation, independent of the Todo queue: every :reflect :interval-ms
-   run materialize-sources! (recurring bare URLs -> ingest tasks) then relink-sources!
-   (bare URLs that now have a card -> [[reference]], pushed to main)."
+   materialize recurring bare URLs into ingest tasks and dangling [[concepts]] (referenced
+   by >= :concept-threshold cards) into concept tasks, then relink bare URLs that now have
+   a reference card into [[wikilinks]] (pushed to main)."
   []
   (when-not @reflector
     (reset! reflector true)
@@ -160,7 +161,10 @@
           (when @reflector
             (try (let [q (reflect/materialize-sources! cfg)]
                    (when (seq q) (println "reflect: queued ingest ->" q)))
-                 (catch Throwable t (println "reflect materialize error:" (.getMessage t))))
+                 (catch Throwable t (println "reflect materialize-sources error:" (.getMessage t))))
+            (try (let [c (reflect/materialize-concepts! cfg)]
+                   (when (seq c) (println "reflect: queued concepts ->" c)))
+                 (catch Throwable t (println "reflect materialize-concepts error:" (.getMessage t))))
             (try (let [r (reflect/relink-sources! cfg)]
                    (when (seq r) (println "reflect: relinked" (count r) "file(s)")))
                  (catch Throwable t (println "reflect relink error:" (.getMessage t))))))))

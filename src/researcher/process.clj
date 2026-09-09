@@ -60,12 +60,9 @@
        "are for concepts only; a periodic job turns a recurring source URL into a reference card and "
        "relinks it for you.>\"})\n\n"
        "STEP 2 — FILE THE FRONTIER (dedup FIRST; call each tool once per real item):\n"
-       "- Every CONCEPT the note leans on that has NO card and NO open task -> leave the [[link]] AND "
-       "(propose-concept! {:title \"<CANONICAL established name — 'Principle of least privilege', not "
-       "'Least privilege'>\" :rationale \"why it matters + how THIS source frames it\" :quotes "
-       "[\"verbatim line(s)\"] :angle \"the facet worth a card\" :seed_note \"<source url>\"}). A "
-       "dangling [[link]] with no card and no task is an ORPHAN — file the concept so it can become a "
-       "card. Only a truly peripheral mention needs no task.\n"
+       "- Leave a [[Canonical name]] wikilink for every CONCEPT the note leans on (dangling is fine "
+       "— it is the frontier). Do NOT file concept tasks: a periodic job promotes a concept to the "
+       "queue once several cards link it.\n"
        "- Every OPEN QUESTION the source raises and leaves unresolved -> (propose-research! {:question "
        "\"<the question in plain words>\" :rationale \"why it matters + how the source raises it\" "
        ":angle \"...\" :seed_note \"<source url>\"}). A real research task (investigate, cite, write an "
@@ -121,11 +118,9 @@
        "not be cited.\n\n"
        "FRONTIER — the depth lives OUTSIDE this card; file follow-ups (dedup first: recall + "
        "open-tasks; enrich if a task exists):\n"
-       "- Every related CONCEPT your card leans on that has NO card and NO open task -> leave the "
-       "[[Canonical name|short form]] link AND (propose-concept! {:title \"<canonical name>\" "
-       ":rationale \"why it deserves a card, quoting the source\" :seed_note \"<url>\"}). A dangling "
-       "[[link]] with no card and no task is an ORPHAN; only a truly peripheral mention needs no "
-       "task.\n"
+       "- Leave a [[Canonical name|short form]] wikilink for every related CONCEPT (dangling is the "
+       "frontier). Do NOT file concept tasks — a periodic job queues a concept once several cards "
+       "link it.\n"
        "- A genuinely NEW open question worth researching -> (propose-research! {:question \"...\" "
        ":rationale \"why it matters\" :seed_note \"<url>\"}).\n"
        "- A source you FETCHED and READ and judged STRONG (foundational; deserves its own full "
@@ -146,9 +141,9 @@
        "4. WRITE with put-answer! / put-connection! / put-concept! (it OVERWRITES an existing card — "
        "the PR shows the diff for review). If it returns {:rejected}, the body is too long — shorten "
        "and push depth into [[links]].\n"
-       "5. File frontier follow-ups: propose-concept! for every leaned-on concept with no card/task "
-       "(so no [[link]] is orphaned), propose-research! for new questions, propose-reference! for "
-       "strong sources. Then stop."))
+       "5. Leave [[Canonical|short]] links for related concepts (a periodic job queues the recurring "
+       "ones); propose-research! for genuinely-new questions, propose-reference! for strong sources. "
+       "Then stop."))
 
 ;; ---------------------------------------------------------------------------
 ;; check-zettel rubric — a recursive omp Zettelkasten editor over a draft card
@@ -191,7 +186,7 @@
    {:stage    "READ"
     :practice "Adler analytical reading + Zettelkasten literature note"
     :writes?  true
-    :tools    ["recall" "fetch" "open-tasks" "enrich-task!" "propose-concept!" "propose-research!" "propose-reference!" "put-reference!"]
+    :tools    ["recall" "fetch" "open-tasks" "enrich-task!" "propose-research!" "propose-reference!" "put-reference!"]
     :model    "opencode-go/deepseek-v4-pro"
     :system   read-system}
 
@@ -201,7 +196,7 @@
     :writes?  true
     :tools    ["recall" "search" "fetch" "central" "reference-frequency" "open-tasks"
                "check-zettel" "put-concept!" "put-connection!" "put-answer!" "put-reference!"
-               "propose-concept!" "propose-research!" "propose-reference!"]
+               "propose-research!" "propose-reference!"]
     :model    "opencode-go/deepseek-v4-pro"
     :system   investigate-system}})
 

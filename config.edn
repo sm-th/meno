@@ -62,7 +62,8 @@
  :orchestrator {:poll-ms 15000 :wip 1}   ; wip = tasks in flight; clamped to 1 until per-run isolation
 
  ;; Scheduled reconciliation (researcher.reflect), independent of the Todo queue.
- :reflect {:ingest-threshold 2    ; a bare URL cited in >= N notes -> auto ingest task
+ :reflect {:ingest-threshold  2    ; a bare URL cited in >= N cards -> ingest task
+           :concept-threshold 2    ; a dangling [[concept]] linked by >= N cards -> concept task
            :max-per-run 3         ; cap ingest tasks filed per reflect tick
            :interval-ms 3600000}  ; run materialize + relink hourly
 

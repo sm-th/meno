@@ -13,7 +13,7 @@
   (atom nil))
 
 (def dry
-  "Global preview switch. When true, side-effecting tools (propose-concept!, ...) PRINT
+  "Global preview switch. When true, side-effecting tools (propose-research!, ...) PRINT
    what they would do instead of touching GitHub/the wiki — so a whole stage can be
    run through the REAL pipeline and watched on screen. Set via (researcher.mcp/dry!)."
   (atom false))

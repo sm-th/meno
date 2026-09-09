@@ -34,3 +34,14 @@
       (is (contains? idx "https://a.com/foo"))
       (is (= 3 (count (get freq "https://a.com/foo"))))   ; the card + two notes
       (is (= 2 (count (get freq "https://b.org/x")))))))
+
+(deftest concept-frequency-counts-dangling-wikilinks
+  (let [dir (str (System/getProperty "java.io.tmpdir") "/reflect-concept-" (System/currentTimeMillis))
+        w   (fn [rel s] (let [f (io/file dir rel)] (io/make-parents f) (spit f s)))]
+    (w "content/concepts/Sandbox.md" "---\ntitle: Sandbox\n---\nUses [[Multi-agent system]] and [[Least privilege]].")
+    (w "content/concepts/Orchestrator.md" "---\ntitle: Orchestrator\n---\nA [[Multi-agent system]] coordinator; see [[Sandbox]].")
+    (let [freq (reflect/concept-frequency dir)]
+      (is (= 2 (count (get-in freq ["multi-agent-system" :files]))) "dangling concept linked by 2 cards")
+      (is (= "Multi-agent system" (get-in freq ["multi-agent-system" :title])))
+      (is (nil? (get freq "sandbox")) "resolves to an existing card -> not a candidate")
+      (is (= 1 (count (get-in freq ["least-privilege" :files]))) "dangling, only 1 card"))))

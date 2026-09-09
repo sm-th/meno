@@ -22,23 +22,6 @@
     {:score (get h "score") :kind (get p "kind") :title (get p "title")
      :number (get p "number") :url (get p "url") :source (get p "source")}))
 
-(defn- concept-body
-  "Body for an `Add concept: X` task — only what is SPECIFIC to the source that
-   raised it: Context (why/how it frames the concept), verbatim Quotes, Angle.
-   HOW to write the card lives in the INVESTIGATE prompt, not here."
-  [{:keys [rationale why quotes angle seed_note]}]
-  (let [ctx (str/trim (str (or rationale why)))
-        qs  (->> (wiki/as-list quotes) (map #(str/trim (str %))) (remove str/blank?))
-        ang (str/trim (str angle))
-        src (str/trim (str seed_note))]
-    (str "## Context\n\n" ctx "\n"
-         (when (seq qs)
-           (str "\n## From the source\n\n" (str/join "\n" (map #(str "> " %) qs)) "\n"))
-         (when-not (str/blank? ang) (str "\n## Angle\n\n" ang "\n"))
-         "\n## References\n\n"
-         (when-not (str/blank? src) (str "- Source: " src "\n"))
-         (process/practice-ref :research))))
-
 (defn- research-body
   "Body for a `Research: <question>` task — the open question to investigate:
    Context (why it matters / how the source raises it), Angle, optional Goals."
@@ -96,7 +79,6 @@
    "central" "(central n) — the n most-linked pages in the wiki graph"
    "reference-frequency" "(reference-frequency) — most-cited source URLs"
    "open-tasks" "(open-tasks) — [{:number :title}] tasks already queued"
-   "propose-concept!" "(propose-concept! {:title :rationale :quotes :angle :seed_note}) — file a task to write a concept card (title is the canonical name)"
    "propose-research!" "(propose-research! {:question :rationale :angle :goals :seed_note}) — file a task to research an open question; INVESTIGATE writes a cited answer card"
    "propose-reference!" "(propose-reference! {:url :context}) — file a task to READ+ingest a source into a reference card"
    "enrich-task!" "(enrich-task! n md) — append a note to an open task"
@@ -124,15 +106,6 @@
          "reference-frequency" (fn [] (graph/reference-frequency (graph/load-graph cfg)))
          "open-tasks" (fn [] (mapv (fn [i] {:number (get i "number") :title (get i "title")})
                                    (gh/open-issues cfg)))
-         "propose-concept!"
-         (fn [m]
-           (let [ctx (str/trim (str (or (:rationale m) (:why m))))]
-             (if (< (count ctx) 20)
-               {:refused (str "a concept task needs a substantive :rationale (>=20 chars): why this "
-                              "concept deserves a card and how the source frames it")}
-               (file-task! cfg dry? {:title (str "Add concept: " (str/trim (str (:title m))))
-                                     :type :concept :role :research
-                                     :body (concept-body m) :index-text ctx}))))
          "propose-research!"
          (fn [m]
            (let [q   (str/trim (str (or (:question m) (:title m))))

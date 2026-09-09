@@ -13,7 +13,8 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [researcher.runner :as runner]
-            [researcher.github :as gh]))
+            [researcher.github :as gh]
+            [researcher.projects :as projects]))
 
 ;; --------------------------------------------------------------------------
 ;; git plumbing (own checkout; read-only scan + push-to-main for relink)
@@ -189,3 +190,69 @@
       (git! dir "-c" (str "core.sshCommand=" (ssh-cmd cfg))
             "push" (str "git@github.com:" (get-in cfg [:github :repo]) ".git") "HEAD:main"))
     @changed))
+
+;; --------------------------------------------------------------------------
+;; job 3: materialize concepts — a dangling [[concept]] referenced by >= N cards
+;;        -> an "Add concept: X" task. Agents no longer file concept tasks; they
+;;        just leave [[wikilinks]] and recurrence promotes a concept to the queue.
+;; --------------------------------------------------------------------------
+
+(defn- wikilink-targets
+  "All [[target]] / [[target|display]] link targets in a markdown string."
+  [md]
+  (->> (re-seq #"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]" (str md))
+       (map (comp str/trim second))
+       (remove str/blank?)))
+
+(defn- card-slugs
+  "Slugs of existing cards (Quartz-slugged filename) — what a [[link]] resolves to."
+  [dir]
+  (set (map #(quartz-slug (-> (rel-of dir %) (str/split #"/") last (str/replace #"\.md$" "")))
+            (content-files dir))))
+
+(defn concept-frequency
+  "slug -> {:title <first-seen link text> :files #{rel}} for DANGLING concept wikilinks
+   (targets with no card yet), counted across every card."
+  [dir]
+  (let [have (card-slugs dir)]
+    (reduce (fn [acc f]
+              (let [rel (rel-of dir f)]
+                (reduce (fn [a t]
+                          (let [s (quartz-slug t)]
+                            (if (or (str/blank? s) (contains? have s))
+                              a
+                              (-> a (update-in [s :files] (fnil conj #{}) rel)
+                                    (update-in [s :title] (fn [x] (or x t)))))))
+                        acc (wikilink-targets (slurp f)))))
+            {} (content-files dir))))
+
+(defn- file-concept-task! [cfg title citing]
+  (let [issue (gh/create-issue cfg {:title  (str "Add concept: " title)
+                                    :labels ["type:concept" "role:research"]
+                                    :body   (str "## Context\n\nAuto-queued by reflect — this concept "
+                                                 "is referenced by these cards:\n\n"
+                                                 (str/join "\n" (map #(str "- " %) citing)) "\n")})]
+    (when-let [p (projects/find-project cfg)]
+      (projects/add-to-backlog! cfg (get p "id") (get issue "node_id")))
+    (get issue "number")))
+
+(defn materialize-concepts!
+  "File 'Add concept: X' tasks for dangling concept wikilinks referenced by >=
+   :concept-threshold cards, with no card and no open task. Bounded by WIP cap + :max-per-run."
+  [cfg]
+  (let [dir    (fresh-main! cfg)
+        thr    (get-in cfg [:reflect :concept-threshold] 2)
+        freq   (concept-frequency dir)
+        open   (set (map #(str (get % "title")) (gh/open-issues cfg)))
+        cap    (get-in cfg [:planner :wip-cap] 10)
+        budget (max 0 (- cap (count open)))
+        want   (->> freq
+                    (map second)
+                    (filter (fn [{:keys [files title]}]
+                              (and (>= (count files) thr)
+                                   (not (contains? open (str "Add concept: " title))))))
+                    (sort-by (fn [{:keys [files]}] (- (count files)))))
+        pick   (take (min budget (get-in cfg [:reflect :max-per-run] 3)) want)]
+    (vec (for [{:keys [title files]} pick]
+           (do (file-concept-task! cfg title (sort (map #(card-link cfg dir %) files)))
+               title)))))
