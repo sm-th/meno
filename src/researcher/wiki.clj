@@ -95,7 +95,12 @@
         email (get-in cfg [:wiki :author-email] "bot@smith.wiki")]
     (ensure-branch! w)
     (io/make-parents (io/file repo rel))
-    (spit (str repo "/" rel) (render (assoc page :title title)))
+    (spit (str repo "/" rel)
+          (str (render (assoc page :title title)) "\n---\n\n"
+               "*[Page history](https://github.com/" (get-in cfg [:github :repo]) "/commits/"
+               (get-in cfg [:wiki :base] "main") "/"
+               (-> rel (str/replace " " "%20") (str/replace "(" "%28") (str/replace ")" "%29"))
+               ")* — every edit to this page, tracked by PR.\n"))
     (git! repo "add" rel)
     (git! repo
           "-c" (str "user.name=" name)
