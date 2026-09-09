@@ -159,6 +159,9 @@
         (let [cfg (config/load-config)]
           (Thread/sleep (get-in cfg [:reflect :interval-ms] 3600000))
           (when @reflector
+            (try (let [i (reflect/ingest-new! cfg)]
+                   (when (seq i) (println "reflect: auto-ingested ->" (mapv :title i))))
+                 (catch Throwable t (println "reflect ingest-new error:" (.getMessage t))))
             (try (let [q (reflect/materialize-sources! cfg)]
                    (when (seq q) (println "reflect: queued ingest ->" q)))
                  (catch Throwable t (println "reflect materialize-sources error:" (.getMessage t))))

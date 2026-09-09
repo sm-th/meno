@@ -15,7 +15,9 @@
             [researcher.runner :as runner]
             [researcher.github :as gh]
             [researcher.projects :as projects]
-            [researcher.task :as task]))
+            [researcher.task :as task]
+            [researcher.git :as git]
+            [researcher.note :as note]))
 
 ;; --------------------------------------------------------------------------
 ;; git plumbing (own checkout; read-only scan + push-to-main for relink)
@@ -257,6 +259,47 @@
     (vec (for [{:keys [title files]} pick]
            (do (file-concept-task! cfg title (sort (map #(card-link cfg dir %) files)))
                title)))))
+
+;; --------------------------------------------------------------------------
+;; job 0: ingest-new — the standard new-article puller. Newest published blog
+;;        posts with no reference card (not ingested) and no open ingest task ->
+;;        `role:ingest` tasks. Runs on the reflect tick; call with a limit for a
+;;        one-off batch. This is the automatic ingest of new posts.
+;; --------------------------------------------------------------------------
+
+(defn published-posts
+  "Newest-first blog posts as {:rel :url}, one per `publish:` commit. URL is derived
+   from the path (no slurp), so enumeration stays cheap."
+  [cfg]
+  (let [blog (get-in cfg [:blog :root])
+        burl (get-in cfg [:blog :url])]
+    (->> (git/publish-commits blog)
+         (mapcat (fn [c] (git/commit-post-files blog (:sha c))))
+         distinct
+         (keep (fn [rel] (when-let [u (note/path->url rel)]
+                           {:rel rel :url (str burl u)}))))))
+
+(defn ingest-new!
+  "File `role:ingest` tasks for the newest published posts not yet ingested (no
+   reference card on main) and not already queued (no open `Ingest:` issue).
+   Newest-first, capped at `limit` (default :reflect :ingest-new-per-run). Returns
+   the filed [{:title :url}]. The scheduled auto-ingest; pass a limit for a one-off."
+  ([cfg] (ingest-new! cfg (get-in cfg [:reflect :ingest-new-per-run] 5)))
+  ([cfg limit]
+   (let [dir   (fresh-main! cfg)
+         blog  (get-in cfg [:blog :root])
+         have  (set (keys (reference-index dir)))
+         openi (->> (gh/open-issues cfg) (map #(str (get % "title")))
+                    (filter #(str/starts-with? % "Ingest: "))
+                    (map #(str/replace % #"^Ingest:\s*" "")) set)
+         new   (->> (published-posts cfg)
+                    (remove #(contains? have (normalize-url (:url %))))
+                    (remove #(contains? openi (:url %)))
+                    (take limit))]
+     (vec (for [{:keys [rel url]} new]
+            (let [title (:title (note/load-note blog rel))]
+              (runner/file-ingest-task! cfg url (str "Auto-ingest: new blog post — " title))
+              {:title title :url url}))))))
 
 ;; --------------------------------------------------------------------------
 ;; job 4: curate-research — pick the single most interesting open question and

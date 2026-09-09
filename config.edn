@@ -65,6 +65,7 @@
  :reflect {:ingest-threshold  2    ; a bare URL cited in >= N cards -> ingest task
            :concept-threshold 2    ; a dangling [[concept]] linked by >= N cards -> concept task
            :max-per-run 3         ; cap ingest tasks filed per reflect tick
+           :ingest-new-per-run 5  ; newest published blog posts to auto-ingest per tick
            :interval-ms 3600000}  ; run materialize + relink hourly
 
  ;; GitHub Projects v2 = the approval BOARD. Separate CLASSIC token (`project`
