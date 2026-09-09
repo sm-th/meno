@@ -49,7 +49,7 @@
 
  ;; Worker (Stage 2): one approved issue -> a per-issue branch -> PR. Runs in the
  ;; living image so the /mcp/worker endpoint is branch-scoped via researcher.task.
- :worker {:branch-prefix "researcher/issue-"}
+ :worker {:branch-prefix "researcher/issue-" :auto-merge true}
 
  ;; The RESEARCH PROCESS — stages, prompts, tools, the card contract — lives in CODE:
  ;; researcher.process (the swappable zeno layer). No :roles here; no external skill cards.
@@ -66,6 +66,7 @@
            :concept-threshold 2    ; a dangling [[concept]] linked by >= N cards -> concept task
            :max-per-run 3         ; cap ingest tasks filed per reflect tick
            :ingest-new-per-run 5  ; newest published blog posts to auto-ingest per tick
+           :push-poll-ms 20000    ; react to a push to main within this window (reflect-on-merge)
            :interval-ms 3600000}  ; run materialize + relink hourly
 
  ;; GitHub Projects v2 = the approval BOARD. Separate CLASSIC token (`project`

@@ -359,8 +359,12 @@
                        (wiki/push-branch! cfg repo branch)
                        (let [pr (gh/create-pr! cfg {:title (:title issue)
                                                     :head  branch :base base
-                                                    :body  (pr-body issue)})]
-                         {:issue num :branch branch :pr (get pr "html_url")})
+                                                    :body  (pr-body issue)})
+                             merged? (when (get-in cfg [:worker :auto-merge])
+                                       (try (gh/merge-pr! cfg (get pr "number")) true
+                                            (catch Throwable e
+                                              (println "auto-merge failed:" (.getMessage e)) false)))]
+                         {:issue num :branch branch :pr (get pr "html_url") :merged (boolean merged?)})
                        (catch Throwable e {:issue num :branch branch :error (.getMessage e)}))
                      writes? {:issue num :no-write true}
                      :else   {:issue num :done true})]
@@ -370,7 +374,7 @@
         ;; (PR opened, nothing written, or push/PR error) so no card ever lingers there.
         (when (and num (:item-id issue))
           (try (projects/set-status! cfg (get (projects/find-project cfg) "id") (:item-id issue)
-                 (get-in cfg [:projects (if (:pr result) :review-status :done-status)] "Done"))
+                 (get-in cfg [:projects (if (and (:pr result) (not (:merged result))) :review-status :done-status)] "Done"))
                (catch Throwable _ nil)))
         result)
       (finally (reset! task/current nil)))))

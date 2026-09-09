@@ -163,3 +163,28 @@
     (if (= 200 status)
       (mapv (fn [f] {:path (get f "filename") :status (get f "status")}) body)
       (throw (ex-info "github pr-files failed" {:status status :body body})))))
+
+(defn merge-pr!
+  "Squash-merge a PR. Returns the merge response; throws on failure (conflict, perms,
+   or not mergeable)."
+  [cfg number]
+  (let [{:keys [status body]}
+        (http/json-request {:method :put
+                            :url (str api "/repos/" (repo cfg) "/pulls/" number "/merge")
+                            :headers (H cfg)
+                            :json {:merge_method "squash"}})]
+    (if (= 200 status)
+      body
+      (throw (ex-info "github merge-pr failed" {:status status :body body})))))
+
+(defn main-sha
+  "Head commit SHA of the base branch (used to detect a push/merge to main)."
+  [cfg]
+  (let [base (get-in cfg [:wiki :base] "main")
+        {:keys [status body]}
+        (http/json-request {:method :get
+                            :url (str api "/repos/" (repo cfg) "/commits/" base)
+                            :headers (H cfg)})]
+    (if (= 200 status)
+      (get body "sha")
+      (throw (ex-info "github main-sha failed" {:status status :body body})))))

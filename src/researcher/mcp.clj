@@ -17,7 +17,8 @@
             [researcher.task :as task]
             [researcher.process :as process]
             [researcher.index :as index]
-            [researcher.reflect :as reflect])
+            [researcher.reflect :as reflect]
+            [researcher.github :as gh])
   (:import (com.sun.net.httpserver HttpServer HttpHandler HttpExchange)
            (java.net InetSocketAddress))
   (:gen-class))
@@ -107,6 +108,7 @@
 (def ^:private orchestrator (atom nil))
 (def ^:private active (atom #{}))       ; issue numbers currently running
 (def ^:private reflector (atom nil))
+(def ^:private pusher (atom nil))        ; base-branch push watcher
 
 (defn start-loop!
   "Background orchestrator: poll the board and run approved (Todo) issues, up to
@@ -144,7 +146,7 @@
             (Thread/sleep (get-in cfg [:orchestrator :poll-ms] 15000))))))
     :started))
 
-(defn stop-loop! [] (reset! orchestrator nil) (reset! reflector nil) :stopped)
+(defn stop-loop! [] (reset! orchestrator nil) (reset! reflector nil) (reset! pusher nil) :stopped)
 
 (defn reflect-loop!
   "Scheduled reconciliation, independent of the Todo queue: every :reflect :interval-ms
@@ -176,6 +178,31 @@
                  (catch Throwable t (println "reflect changelog error:" (.getMessage t))))))))
     :started))
 
+(defn push-watch-loop!
+  "React to every push to the base branch (each merged PR): re-run the merge-driven
+   reflect jobs — materialize + relink + changelog — within :reflect :push-poll-ms of a
+   change, and once at startup to catch up, instead of waiting for the hourly tick.
+   (Blog ingest stays on reflect-loop!'s timer — new posts are external to the wiki.)"
+  []
+  (when-not @pusher
+    (reset! pusher true)
+    (future
+      (let [seen (atom nil)]
+        (while @pusher
+          (try
+            (let [cfg (config/load-config)
+                  sha (gh/main-sha cfg)]
+              (when (not= sha @seen)
+                (println "reflect(push): base @" (subs (str sha) 0 (min 7 (count (str sha)))))
+                (try (reflect/materialize-sources! cfg)  (catch Throwable t (println "push materialize-sources:" (.getMessage t))))
+                (try (reflect/materialize-concepts! cfg) (catch Throwable t (println "push materialize-concepts:" (.getMessage t))))
+                (try (reflect/relink-sources! cfg)       (catch Throwable t (println "push relink:" (.getMessage t))))
+                (try (reflect/rebuild-changelog! cfg)    (catch Throwable t (println "push changelog:" (.getMessage t))))
+                (reset! seen (try (gh/main-sha cfg) (catch Throwable _ sha)))))
+            (catch Throwable t (println "push-watch error:" (.getMessage t))))
+          (Thread/sleep (get-in (config/load-config) [:reflect :push-poll-ms] 20000)))))
+    :started))
+
 (defn -main [& _]
   (let [cfg   (config/load-config)
         host  (get-in cfg [:gateway :host] "127.0.0.1")
@@ -193,5 +220,6 @@
     (try (index/sync-tasks! cfg) (catch Throwable _ nil))
     (start-loop!)
     (reflect-loop!)
+    (push-watch-loop!)
     (flush)
     (clojure.main/repl :prompt #(do (print "image=> ") (flush)))))
