@@ -42,7 +42,7 @@
        (when seed (str "seed: " seed "\n"))
        "---\n\n"
        (str/trim (or body "")) "\n"
-       (when (seq sources)
+       (when (and (seq sources) (not (re-find #"(?m)^## Sources" (str body))))
          (str "\n## Sources\n\n" (str/join "\n" (map #(str "- " %) sources)) "\n"))
        (when collection-url
          (str "\nSaved references: " collection-url "\n")))))
