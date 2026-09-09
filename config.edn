@@ -58,8 +58,10 @@
  :github {:repo "agent-smith-wiki/smith-wiki" :token-env "GH_TOKEN"}
 
  ;; Orchestrator: the living image polls the board and runs the next approved
- ;; (Todo) issue on its own, one at a time. Filing/approving stays manual.
- :orchestrator {:poll-ms 15000 :wip 1}   ; wip = tasks in flight; clamped to 1 until per-run isolation
+ ;; (Todo) issue on its own, one at a time. Auto-approve drips one Backlog task
+ ;; into Todo every :promote-ms, but only when the board is idle.
+ :orchestrator {:poll-ms 15000 :wip 1
+                :auto-approve true :promote-ms 1800000}   ; +1 Backlog->Todo / 30 min when idle
 
  ;; Scheduled reconciliation (researcher.reflect), independent of the Todo queue.
  :reflect {:ingest-threshold  2    ; a bare URL cited in >= N cards -> ingest task

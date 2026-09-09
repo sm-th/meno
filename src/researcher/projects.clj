@@ -152,3 +152,26 @@
               (create-project! cfg (get (owner cfg) "id") (get-in cfg [:projects :name])))]
     (ensure-collaborator! cfg (get p "id"))
     p))
+
+(defn promote-one!
+  "Auto-triage: move the oldest Backlog issue (No Status) to the approved (Todo)
+   status, but only when the board is idle — nothing already in Todo or In Progress —
+   so tasks advance one at a time. Returns the promoted {:number :title} or nil."
+  [cfg]
+  (when-let [p (find-project cfg)]
+    (let [pid    (get p "id")
+          its    (->> (items cfg pid)
+                      (keep (fn [it]
+                              (when-let [c (get it "content")]
+                                {:item-id (get it "id") :number (get c "number")
+                                 :title   (get c "title")
+                                 :status  (get-in it ["status" "name"])
+                                 :state   (get c "state")})))
+                      (filter #(= "OPEN" (:state %))))
+          todo   (get-in cfg [:projects :approved-status] "Todo")
+          inprog (get-in cfg [:projects :in-progress-status] "In Progress")
+          busy?  (some #(#{todo inprog} (:status %)) its)
+          nxt    (->> its (filter #(nil? (:status %))) (sort-by :number) first)]
+      (when (and (not busy?) nxt)
+        (set-status! cfg pid (:item-id nxt) todo)
+        {:number (:number nxt) :title (:title nxt)}))))

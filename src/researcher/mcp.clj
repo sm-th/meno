@@ -18,7 +18,8 @@
             [researcher.process :as process]
             [researcher.index :as index]
             [researcher.reflect :as reflect]
-            [researcher.github :as gh])
+            [researcher.github :as gh]
+            [researcher.projects :as projects])
   (:import (com.sun.net.httpserver HttpServer HttpHandler HttpExchange)
            (java.net InetSocketAddress))
   (:gen-class))
@@ -109,6 +110,7 @@
 (def ^:private active (atom #{}))       ; issue numbers currently running
 (def ^:private reflector (atom nil))
 (def ^:private pusher (atom nil))        ; base-branch push watcher
+(def ^:private promoter (atom nil))      ; auto-approve Backlog->Todo drip
 
 (defn start-loop!
   "Background orchestrator: poll the board and run approved (Todo) issues, up to
@@ -146,7 +148,7 @@
             (Thread/sleep (get-in cfg [:orchestrator :poll-ms] 15000))))))
     :started))
 
-(defn stop-loop! [] (reset! orchestrator nil) (reset! reflector nil) (reset! pusher nil) :stopped)
+(defn stop-loop! [] (reset! orchestrator nil) (reset! reflector nil) (reset! pusher nil) (reset! promoter nil) :stopped)
 
 (defn reflect-loop!
   "Scheduled reconciliation, independent of the Todo queue: every :reflect :interval-ms
@@ -189,6 +191,24 @@
           (Thread/sleep (get-in (config/load-config) [:reflect :push-poll-ms] 20000)))))
     :started))
 
+(defn promote-loop!
+  "Auto-triage: every :orchestrator :promote-ms, drip ONE Backlog issue into Todo,
+   but only when the board is idle (nothing in Todo/In Progress), so tasks advance
+   one at a time without manual approval. Enabled by :orchestrator :auto-approve."
+  []
+  (when-not @promoter
+    (reset! promoter true)
+    (future
+      (while @promoter
+        (Thread/sleep (get-in (config/load-config) [:orchestrator :promote-ms] 1800000))
+        (when @promoter
+          (try (let [cfg (config/load-config)]
+                 (when (get-in cfg [:orchestrator :auto-approve])
+                   (when-let [p (projects/promote-one! cfg)]
+                     (println "auto-approve -> #" (:number p) (:title p)))))
+               (catch Throwable t (println "auto-approve error:" (.getMessage t)))))))
+    :started))
+
 (defn -main [& _]
   (let [cfg   (config/load-config)
         host  (get-in cfg [:gateway :host] "127.0.0.1")
@@ -207,5 +227,6 @@
     (start-loop!)
     (reflect-loop!)
     (push-watch-loop!)
+    (promote-loop!)
     (flush)
     (clojure.main/repl :prompt #(do (print "image=> ") (flush)))))
