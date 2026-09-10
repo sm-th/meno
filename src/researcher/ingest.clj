@@ -30,7 +30,10 @@
        "worked answer). One idea per page.\n\n"
        "Bibliographic data goes in FRONTMATTER, never prose: for a :source page, pass the "
        "reading's :url (required), and :author / :date when known — do NOT write a 'Source: ...' "
-       "line in the body. The body is your digest (summary, key ideas, open questions).\n\n"
+       "line in the body. The body is your digest (summary, key ideas, open questions). TITLE a "
+       ":source as 'Name (domain)' — e.g. 'Mosaic effect (en.wikipedia.org)', 'STORM: … "
+       "(arxiv.org)' — so a reading never collides with a concept of the same name, and link it "
+       "by that full title. Concept/claim/question pages keep clean names (no domain).\n\n"
        "Process — two phases:\n"
        " 1. DIGEST the given source: (list-kb) for the map; then for EACH idea before you write "
        "it, (similar \"<the idea in one sentence>\") to find the nearest existing pages — grep is "
@@ -95,7 +98,9 @@
        "- CITATION-LOCK: a page must assert only what its cited sources support. Flag specifics, "
        "numbers or claims that go beyond the fetched source text.\n"
        "- EXTERNAL GROUNDING: a page grounded only in the author's own blog post is incomplete; the "
-       "agent should connect ideas to external prior art via (search ...). Flag blog-only pages.\n\n"
+       "agent should connect ideas to external prior art via (search ...). Flag blog-only pages.\n"
+       "- SOURCE NAMING: a :source title must end with its domain in parentheses, e.g. 'Mosaic "
+       "effect (en.wikipedia.org)'. Flag a :source titled like a bare concept.\n\n"
        "Use `blocker` only when continuing would clearly write a duplicate or ungrounded page."))
 
 (defn ingest!

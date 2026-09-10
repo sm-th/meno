@@ -89,3 +89,43 @@
     (vec (for [f (pages cfg) :let [t (slurp f)]
                :when (str/includes? (str/lower-case t) ql)]
            (or (fm t "title") (.getName f))))))
+
+(defn domain
+  "Host of a URL without a leading www. — disambiguates :source titles."
+  [url]
+  (some-> (re-find #"https?://([^/]+)" (str url)) second (str/replace #"^www\." "")))
+
+(defn source-title
+  "Canonical :source title = 'Name (domain)', so a reading never collides with a
+   concept of the same name. Idempotent: an existing (domain) suffix is left alone."
+  [title url]
+  (let [d (domain url)]
+    (if (and d (not (re-find #"\([^)]*\.[^)]*\)\s*$" (str title))))
+      (str title " (" d ")")
+      title)))
+
+(defn migrate-source-titles!
+  "One-off reconcile: retitle every :source page to `source-title`, rename its file
+   to the new slug, and relink references as [[new|old]] (display text preserved).
+   Returns {:renamed [[old new] ...]}."
+  [cfg]
+  (let [renames (vec (for [f (pages cfg)
+                           :let [t (slurp f)
+                                 title (fm t "title")
+                                 new (when title (source-title title (fm t "url")))]
+                           :when (and (= (fm t "type") "source") title (not= title new))]
+                       [title new]))]
+    (doseq [[old new] renames]
+      (let [oldf (page-file cfg old)
+            body (slurp oldf)
+            body' (str/replace body #"(?m)^title:.*$" (fn [_] (str "title: " (pr-str new))))]
+        (spit (page-file cfg new) body')
+        (when (not= (.getPath oldf) (.getPath (page-file cfg new))) (.delete oldf))))
+    (doseq [f (pages cfg) :let [t (slurp f)]]
+      (let [t' (reduce (fn [s [old new]]
+                         (-> s
+                             (str/replace (str "[[" old "|") (str "[[" new "|"))
+                             (str/replace (str "[[" old "]]") (str "[[" new "|" old "]]"))))
+                       t renames)]
+        (when (not= t t') (spit f t'))))
+    {:renamed renames}))
