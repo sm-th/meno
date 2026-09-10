@@ -9,6 +9,9 @@
         :author-email "agent@smith.wiki"
         :concept-body-max 900}           ; hard cap: a concept card body is a SHORT definition
 
+ ;; The KB lives as the 11ty content dir of smith.wiki; ingest writes pages here.
+ :kb {:root "~/sm-th/smith-wiki/site"}
+
  ;; Embeddings: OpenRouter /v1/embeddings, open-weights Qwen3-Embedding-8B
  ;; (hosted now, self-hostable in tower later). Key from secretspec env.
  :embed {:base-url "https://openrouter.ai/api/v1"

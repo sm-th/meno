@@ -4,10 +4,8 @@
         nrepl/nrepl {:mvn/version "1.3.1"}
         cider/cider-nrepl {:mvn/version "0.50.2"}}
  :aliases
- {:run {:main-opts ["-m" "researcher.main"]}
-  ;; The living image: HTTP eval door + embedded nREPL + stdin REPL, and it
-  ;; spawns omp itself. ONE process for everything.
-  :mcp {:main-opts ["-m" "researcher.mcp"]}
-  ;; Fast deterministic test suite (no network/omp) — the regression gate.
+ {;; meno CLI: `clojure -M:run ingest <url>`
+  :run  {:main-opts ["-m" "researcher.main"]}
+  ;; deterministic test suite (no network/omp)
   :test {:extra-paths ["test"]
          :main-opts ["-m" "researcher.test-runner"]}}}

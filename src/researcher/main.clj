@@ -1,35 +1,12 @@
 (ns researcher.main
-  (:require [researcher.config :as config]
-            [researcher.runner :as runner]
-            [researcher.sandbox :as sandbox]
-            [researcher.index :as index]
-            [researcher.refs :as refs]
-            [researcher.budget :as budget]
-            [researcher.diag :as diag])
-  (:gen-class))
+  "meno CLI entry. For now the one command is `ingest <url>`: read one source and
+   integrate it into the KB via a single spawn through the Zeno grant."
+  (:require [researcher.ingest :as ingest]))
 
 (defn -main [& args]
-  (let [cmd (or (first args) "ingest")
-        cfg (config/load-config)]
-    (case cmd
-      "ingest" (println (runner/file-ingest-task! cfg))
-      "run"    (let [i (runner/pick cfg (second args))]
-                 (if i (runner/run-issue cfg i) (println "no approved (Todo) issue")))
-      "launch" (sandbox/print-launch cfg (keyword (or (second args) "worker")) ["run" "N"])
-      "index"  (do (budget/reset-run!)
-                   (println "indexed" (index/build! cfg) "docs into Qdrant")
-                   (budget/report))
-      "recall" (do (budget/reset-run!)
-                   (index/recall-newest cfg (Integer/parseInt (or (second args) "8")))
-                   (budget/report))
-      "ingest-refs" (do (budget/reset-run!)
-                        (let [a (second args)]
-                          (cond
-                            (= a "all")                  (println "urls:" (refs/ingest-all! cfg))
-                            (or (nil? a) (= a "newest")) (refs/ingest-newest! cfg)
-                            :else                         (refs/ingest-slug! cfg a)))
-                        (budget/report))
-      "diag"   (diag/run)
-      (println "usage: clojure -M -m researcher.main [ingest|run [N]|launch <p>|index|recall <k>|ingest-refs [all|newest|<slug>]|diag]"))
-    (flush)
-    nil))
+  (try
+    (case (first args)
+      "ingest" (let [r (ingest/run-post {:url (second args)})]
+                 (println :exit (:exit r)))
+      (println "usage: clojure -M:run ingest <url>"))
+    (finally (shutdown-agents))))
