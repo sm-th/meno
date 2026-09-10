@@ -49,7 +49,7 @@
  ;; duplicates, missing provenance, or citation-lock violations. Scoped per-spawn
  ;; via a --config overlay; never touches the interactive omp config. Bump the
  ;; model if the critic proves weak.
- :advisor {:model "opencode-go/deepseek-v4-flash"}
+ :advisor {:model "opencode-go/qwen3.8-flash"}   ; Qwen (cross-family vs the DeepSeek executor) — decorrelated critic
 
  ;; Human-review policy: keep the queue tiny. File at most :max-new-per-run new
  ;; issues per run, and stay silent once :wip-cap open issues exist.
