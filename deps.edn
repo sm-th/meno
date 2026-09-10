@@ -5,7 +5,9 @@
         cider/cider-nrepl {:mvn/version "0.50.2"}}
  :aliases
  {;; meno CLI: `clojure -M:run ingest <url>`
-  :run  {:main-opts ["-m" "researcher.main"]}
+  :run   {:main-opts ["-m" "researcher.main"]}
+  ;; the ever-living image: gateway up once + supervised blog-ingest loop
+  :image {:main-opts ["-m" "researcher.image"]}
   ;; deterministic test suite (no network/omp)
-  :test {:extra-paths ["test"]
-         :main-opts ["-m" "researcher.test-runner"]}}}
+  :test  {:extra-paths ["test"]
+          :main-opts ["-m" "researcher.test-runner"]}}}

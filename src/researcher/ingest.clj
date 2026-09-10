@@ -3,8 +3,8 @@
 
   Read ONE source and integrate it into the discourse-graph KB. Defines the
   capability grant the ingest agent gets (the verbs it may eval) and its system
-  prompt, and drives one spawn through the living image. This is the first meno
-  role built on the Zeno core (grant + spawn + image)."
+  prompt. `ingest!` is the handler (one spawn against an already-running image);
+  `run-post` is a one-shot convenience that spins a throwaway image around it."
   (:require [researcher.kb :as kb]
             [researcher.config :as config]
             [researcher.reader :as reader]
@@ -48,22 +48,26 @@
 (defn grant-spec [cfg]
   {:vocab (vocab cfg) :docs docs :ctx-info {:role "ingest" :kb (kb/root cfg)}})
 
+(defn- prompt-for [{:keys [title url body]}]
+  (let [text (or body (when url (reader/readable url)) "")]
+    (str "SOURCE" (when title (str " — " title)) (when url (str " (" url ")")) ":\n\n" text)))
+
+(defn ingest!
+  "Ingest one source into the KB via one spawn against an ALREADY-RUNNING gateway.
+   The living image owns the gateway; this is just the handler. source = {:title :url :body}."
+  [cfg gateway-url source]
+  (spawn/spawn {:model       (get-in cfg [:omp :model])
+                :system      system
+                :prompt      (prompt-for source)
+                :gateway-url gateway-url
+                :role        :ingest}))
+
 (defn run-post
-  "Ingest one source into the KB via a single spawn. source = {:title :url :body}
-   (body optional; fetched from url if absent). Returns the spawn result."
+  "One-shot: spin a throwaway image, ingest one source, stop. For manual runs."
   ([source] (run-post (config/load-config) source))
-  ([cfg {:keys [title url body]}]
-   (let [img    (image/start! {:host  (get-in cfg [:gateway :host] "127.0.0.1")
-                               :port  (get-in cfg [:gateway :port] 7777)
-                               :roles {:ingest (fn [] (grant-spec cfg))}})
-         text   (or body (when url (reader/readable url)) "")
-         prompt (str "SOURCE"
-                     (when title (str " — " title))
-                     (when url (str " (" url ")")) ":\n\n" text)]
-     (try
-       (spawn/spawn {:model       (get-in cfg [:omp :model])
-                     :system      system
-                     :prompt      prompt
-                     :gateway-url (:gateway-url img)
-                     :role        :ingest})
-       (finally (image/stop! img))))))
+  ([cfg source]
+   (let [img (image/start! {:host  (get-in cfg [:gateway :host] "127.0.0.1")
+                            :port  (get-in cfg [:gateway :port] 7777)
+                            :roles {:ingest (fn [] (grant-spec cfg))}})]
+     (try (ingest! cfg (:gateway-url img) source)
+          (finally (image/stop! img))))))
