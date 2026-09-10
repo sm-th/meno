@@ -27,6 +27,8 @@ Public-in / public-out, all recorded in git — auditable and revertible.
 
 ## Docs
 
+- **[`docs/design.md`](docs/design.md)** — **the target design** (Zulip working layer ·
+  discourse-graph KB · stateless engine). Direction, not current state.
 - **[`docs/process.md`](docs/process.md)** — **the research process** (what it reads,
   how it decides, how you approve, how a page is written and reviewed, the methods).
   Start here.
