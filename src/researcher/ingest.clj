@@ -31,8 +31,15 @@
        "write the pages it warrants — a :source for the reading itself (url/author/date in "
        "fields), a :concept per key idea, :claim pages for positions taken, :question pages for "
        "what's left open — each linking related pages as [[Canonical Title]]. UPDATE an existing "
-       "page (read-page then write-page) instead of duplicating. Keep pages atomic and short. "
-       "When there is nothing more to file, stop."))
+       "page (read-page then write-page) instead of duplicating. Keep pages atomic and short.\n\n"
+       "Provenance (REQUIRED): every :concept, :claim and :research page MUST end with a "
+       "'## Sources' section linking the :source page(s) it is grounded in, e.g. "
+       "'## Sources\\n- [[An auto-researcher built on my blog]]'. That source page carries the "
+       "origin url, so every idea stays traceable to where it came from. A :source page needs no "
+       "Sources section — its url IS its provenance.\n\n"
+       "Citation-lock: assert ONLY what your cited source(s) support. If a point is your own "
+       "inference beyond the source, either leave it out or file it as a :question — never state "
+       "it as fact. When there is nothing more to file, stop."))
 
 (defn- vocab [cfg]
   {"list-kb"    (fn [] (mapv #(select-keys % [:title :type]) (kb/index cfg)))
