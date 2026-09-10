@@ -84,6 +84,20 @@
   (let [text (or body (when url (reader/readable url)) "")]
     (str "SOURCE" (when title (str " — " title)) (when url (str " (" url ")")) ":\n\n" text)))
 
+(def watchdog
+  (str "# Watchdog — meno ingest reviewer\n\n"
+       "You review an ingest agent building a discourse-graph wiki. Raise concerns, especially:\n\n"
+       "- DEDUP: before writing a :concept/:claim the agent should (similar \"<idea>\"). If a hit "
+       "scores high (>= ~0.8) and means the same thing, a NEW page is a duplicate — it must UPDATE "
+       "the existing page instead. Flag near-duplicates.\n"
+       "- PROVENANCE: every :concept/:claim/:research page must end with a '## Sources' section "
+       "linking the source page(s) it is grounded in. Flag any that lack it.\n"
+       "- CITATION-LOCK: a page must assert only what its cited sources support. Flag specifics, "
+       "numbers or claims that go beyond the fetched source text.\n"
+       "- EXTERNAL GROUNDING: a page grounded only in the author's own blog post is incomplete; the "
+       "agent should connect ideas to external prior art via (search ...). Flag blog-only pages.\n\n"
+       "Use `blocker` only when continuing would clearly write a duplicate or ungrounded page."))
+
 (defn ingest!
   "Ingest one source into the KB via one spawn against an ALREADY-RUNNING gateway.
    The living image owns the gateway; this is just the handler. source = {:title :url :body}."
@@ -92,7 +106,9 @@
                 :system      system
                 :prompt      (prompt-for source)
                 :gateway-url gateway-url
-                :role        :ingest}))
+                :role        :ingest
+                :advisor     (:advisor cfg)
+                :watchdog    watchdog}))
 
 (defn run-post
   "One-shot: spin a throwaway image, ingest one source, stop. For manual runs."

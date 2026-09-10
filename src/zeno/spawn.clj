@@ -14,6 +14,12 @@
   (json/write-str
    {:mcpServers {:zeno {:type "http" :url (str gateway-url "/mcp/" (name role))}}}))
 
+(defn- advisor-overlay
+  "A per-run config overlay that enables the advisor with a chosen model, so
+   attaching a reviewer never mutates the user's global omp settings."
+  [model]
+  (str "modelRoles:\n  advisor: " model "\nadvisor:\n  enabled: true\n"))
+
 (defn spawn
   "Run one omp session against the grant. opts:
      :model       provider/model-id (e.g. \"opencode-go/deepseek-v4-flash\")
@@ -21,11 +27,19 @@
      :prompt      the task input
      :gateway-url base URL of the living image's MCP gateway
      :role        grant role segment in the gateway path (default \"worker\")
+     :advisor     optional {:model ...} — attach an omp reviewer as a quality gate
+     :watchdog    optional review rubric written as WATCHDOG.md for the advisor
    Returns {:exit :out :err}."
-  [{:keys [model system prompt gateway-url role] :or {role "worker"}}]
+  [{:keys [model system prompt gateway-url role advisor watchdog] :or {role "worker"}}]
   (let [tmp (str (System/getProperty "java.io.tmpdir") "/zeno-" (name role) "-"
                  (System/currentTimeMillis))]
     (.mkdirs (io/file tmp ".omp"))
     (spit (io/file tmp ".omp/mcp.json") (mcp-json gateway-url role))
-    (sh/sh "omp" "-p" "--no-tools" "--no-session" "--no-title" "--mode=json"
-           "--model" model "--cwd" tmp "--system-prompt" system "--" prompt)))
+    (when watchdog (spit (io/file tmp "WATCHDOG.md") watchdog))
+    (let [adv (when (:model advisor)
+                (spit (io/file tmp "advisor.yml") (advisor-overlay (:model advisor)))
+                ["--advisor" "--config" (str tmp "/advisor.yml")])]
+      (apply sh/sh
+             (concat ["omp" "-p" "--no-tools" "--no-session" "--no-title" "--mode=json"
+                      "--model" model "--cwd" tmp "--system-prompt" system]
+                     adv ["--" prompt])))))

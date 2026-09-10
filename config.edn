@@ -44,6 +44,13 @@
  ;; card synthesis looks weak in real PRs.
  :omp {:model "opencode-go/deepseek-v4-flash"}
 
+ ;; Advisor: an omp reviewer model attached to each ingest spawn as an automated
+ ;; quality gate — watches the transcript and raises concerns/blockers on
+ ;; duplicates, missing provenance, or citation-lock violations. Scoped per-spawn
+ ;; via a --config overlay; never touches the interactive omp config. Bump the
+ ;; model if the critic proves weak.
+ :advisor {:model "opencode-go/deepseek-v4-flash"}
+
  ;; Human-review policy: keep the queue tiny. File at most :max-new-per-run new
  ;; issues per run, and stay silent once :wip-cap open issues exist.
  :planner {:max-new-per-run 1
