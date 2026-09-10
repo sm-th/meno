@@ -56,6 +56,13 @@
   (when (and v (not (and (string? v) (str/blank? v))))
     (str (name k) ": " (pr-str (str v)) "\n")))
 
+(defn- strip-leading-fm
+  "Drop a leading YAML frontmatter block. write-page! generates its own
+   frontmatter, so if a caller round-trips a read-page value into :body we must
+   not double it."
+  [s]
+  (str/replace (str s) #"(?s)\A---\r?\n.*?\r?\n---\r?\n?" ""))
+
 (defn write-page!
   "Write/overwrite a page. page = {:title :type :body :url :author :date :tags}.
    Bibliographic fields go in the frontmatter (quoted); body is prose only."
@@ -72,7 +79,7 @@
                      "---\n\n")
         existed (.exists f)]
     (io/make-parents f)
-    (spit f (str fmatter (str/trim (str body)) "\n"))
+    (spit f (str fmatter (str/trim (strip-leading-fm body)) "\n"))
     {:wrote (.getName f) :title title :amended existed}))
 
 (defn grep
