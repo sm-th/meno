@@ -373,8 +373,11 @@
         ;; GUARANTEED terminal transition off "In Progress" on EVERY finish path
         ;; (PR opened, nothing written, or push/PR error) so no card ever lingers there.
         (when (and num (:item-id issue))
-          (try (projects/set-status! cfg (get (projects/find-project cfg) "id") (:item-id issue)
-                 (get-in cfg [:projects (if (and (:pr result) (not (:merged result))) :review-status :done-status)] "Done"))
+          (try (let [pid (get (projects/find-project cfg) "id")]
+                 (if (:merged result)
+                   (projects/delete-item! cfg pid (:item-id issue))       ; merged -> off the board
+                   (projects/set-status! cfg pid (:item-id issue)
+                     (get-in cfg [:projects (if (:pr result) :review-status :done-status)] "Done"))))
                (catch Throwable _ nil)))
         result)
       (finally (reset! task/current nil)))))

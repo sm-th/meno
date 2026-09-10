@@ -181,3 +181,10 @@
       (when (and (not busy?) nxt)
         (set-status! cfg pid (:item-id nxt) todo)
         {:number (:number nxt) :title (:title nxt)}))))
+
+(defn delete-item!
+  "Remove an item from the board (deleteProjectV2Item). Keeps the board lean: a merged
+   task's record lives in the closed issue/PR + the changelog, not the board queue."
+  [cfg project-id item-id]
+  (gql cfg "mutation($p:ID!,$i:ID!){ deleteProjectV2Item(input:{projectId:$p,itemId:$i}){ deletedItemId } }"
+       {:p project-id :i item-id}))

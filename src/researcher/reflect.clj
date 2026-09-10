@@ -451,38 +451,43 @@
       (str "- " tag " `" path "`")
       (str "- " tag " [" (clean-title ttl) "](" (wiki-url cfg path) ")"))))
 
-(defn- changelog-md [cfg dir prs]
+(defn- changelog-header []
   (str "---\ntitle: Changelog\n---\n\n"
        "_Auto-generated from GitHub — every accepted PR and the pages it created, edited or "
-       "deleted, newest first. Roll back a change by reverting its PR on GitHub._\n\n"
-       (str/join "\n\n"
-         (for [{:keys [number title url sha merged-at]} prs]
-           (str "### [#" number " " (clean-title title) "](" url ")\n"
-                "merged " (subs (str merged-at) 0 10)
-                (when (seq (str sha)) (str " · `" (subs (str sha) 0 (min 7 (count (str sha)))) "`")) "\n\n"
-                (let [fs (->> (try (gh/pr-files cfg number) (catch Throwable _ []))
-                              (filter #(str/ends-with? (str (:path %)) ".md")))]
-                  (if (seq fs)
-                    (str/join "\n" (map #(changelog-file-line cfg dir %) fs))
-                    "_no page changes_")))))
-       "\n"))
+       "deleted, newest first. Roll back a change by reverting its PR on GitHub._\n\n"))
+
+(defn- changelog-entry [cfg dir {:keys [number title url sha merged-at]}]
+  (str "### [#" number " " (clean-title title) "](" url ")\n"
+       "merged " (subs (str merged-at) 0 10)
+       (when (seq (str sha)) (str " · `" (subs (str sha) 0 (min 7 (count (str sha)))) "`")) "\n\n"
+       (let [fs (->> (try (gh/pr-files cfg number) (catch Throwable _ []))
+                     (filter #(str/ends-with? (str (:path %)) ".md")))]
+         (if (seq fs)
+           (str/join "\n" (map #(changelog-file-line cfg dir %) fs))
+           "_no page changes_"))))
 
 (defn rebuild-changelog!
-  "Regenerate content/changelog.md from the merged-PR history; commit+push to main
-   only when it changed. Returns {:prs n :changed bool}."
+  "APPEND new merged-PR entries to content/changelog.md (newest on top), fetching
+   pr-files ONLY for PRs not already recorded — O(new) per tick, not O(all PRs).
+   Commit+push to main when anything was added. Returns {:added n}."
   [cfg]
-  (let [dir (fresh-main! cfg)
-        f   (io/file dir "content/changelog.md")
-        old (when (.exists f) (slurp f))
-        new (changelog-md cfg dir (gh/merged-prs cfg))]
-    (when (not= old new)
-      (spit f new)
+  (let [dir   (fresh-main! cfg)
+        f     (io/file dir "content/changelog.md")
+        old   (when (.exists f) (slurp f))
+        body  (if-let [i (and old (str/index-of old "### "))] (subs old i) "")
+        known (->> (re-seq #"###\s+\[#(\d+)" (or old ""))
+                   (map (comp #(Integer/parseInt %) second)) set)
+        new   (->> (gh/merged-prs cfg) (remove #(known (:number %))))]  ; newest-first, only unseen
+    (when (seq new)
+      (spit f (str (changelog-header)
+                   (str/join "\n\n" (map #(changelog-entry cfg dir %) new))
+                   (when (seq body) (str "\n\n" body))))
       (git! dir "add" "-A")
       (git! dir "-c" "user.name=smith-wiki-bot" "-c" "user.email=bot@smith.wiki"
-            "-c" "commit.gpgsign=false" "commit" "-m" "reflect: rebuild changelog")
+            "-c" "commit.gpgsign=false" "commit" "-m" (str "reflect: changelog +" (count new)))
       (git! dir "-c" (str "core.sshCommand=" (ssh-cmd cfg))
             "push" (str "git@github.com:" (get-in cfg [:github :repo]) ".git") "HEAD:main"))
-    {:prs (count (gh/merged-prs cfg)) :changed (not= old new)}))
+    {:added (count new)}))
 
 ;; --------------------------------------------------------------------------
 ;; reconcile! — the merge-driven suite (materialize + relink + changelog), run
