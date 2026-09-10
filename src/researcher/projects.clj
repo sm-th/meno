@@ -66,14 +66,20 @@
       (get-in ["addProjectV2ItemById" "item" "id"])))
 
 (defn items
-  "All board items with their Status name and linked issue."
+  "All board items (paginated — the board can exceed one page) with their Status
+   name and linked issue."
   [cfg project-id]
-  (-> (gql cfg "query($p:ID!){ node(id:$p){ ... on ProjectV2 { items(first:100){ nodes {
-                 id
-                 status: fieldValueByName(name:\"Status\"){ ... on ProjectV2ItemFieldSingleSelectValue { name } }
-                 content { ... on Issue { number title id url state } } } } } } }"
-           {:p project-id})
-      (get-in ["node" "items" "nodes"])))
+  (loop [cursor nil acc []]
+    (let [page (-> (gql cfg "query($p:ID!,$c:String){ node(id:$p){ ... on ProjectV2 { items(first:100, after:$c){ pageInfo{ hasNextPage endCursor } nodes {
+                     id
+                     status: fieldValueByName(name:\"Status\"){ ... on ProjectV2ItemFieldSingleSelectValue { name } }
+                     content { ... on Issue { number title id url state } } } } } } }"
+                        {:p project-id :c cursor})
+                   (get-in ["node" "items"]))
+          acc' (into acc (get page "nodes"))]
+      (if (get-in page ["pageInfo" "hasNextPage"])
+        (recur (get-in page ["pageInfo" "endCursor"]) acc')
+        acc'))))
 
 (defn todo-items
   "Open issues the human moved to the approved Status (Todo) — the worker queue."
