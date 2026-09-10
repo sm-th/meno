@@ -268,14 +268,16 @@
 ;; --------------------------------------------------------------------------
 
 (defn published-posts
-  "Newest-first blog posts as {:rel :url}, one per `publish:` commit. URL is derived
-   from the path (no slurp), so enumeration stays cheap."
+  "Newest-first blog posts as {:rel :url}, one per `publish:` commit whose file still
+   exists on disk (renamed/deleted posts are skipped so a stale commit path can't
+   crash ingest). URL derived from the path (no slurp), so enumeration stays cheap."
   [cfg]
   (let [blog (get-in cfg [:blog :root])
         burl (get-in cfg [:blog :url])]
     (->> (git/publish-commits blog)
          (mapcat (fn [c] (git/commit-post-files blog (:sha c))))
          distinct
+         (filter (fn [rel] (.exists (io/file blog rel))))
          (keep (fn [rel] (when-let [u (note/path->url rel)]
                            {:rel rel :url (str burl u)}))))))
 
@@ -297,7 +299,7 @@
                     (remove #(contains? openi (:url %)))
                     (take limit))]
      (vec (for [{:keys [rel url]} new]
-            (let [title (:title (note/load-note blog rel))]
+            (let [title (or (try (:title (note/load-note blog rel)) (catch Throwable _ nil)) url)]
               (runner/file-ingest-task! cfg url (str "Auto-ingest: new blog post — " title))
               {:title title :url url}))))))
 
