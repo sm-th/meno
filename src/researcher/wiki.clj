@@ -44,6 +44,11 @@
        (when (seq tags) (str "tags: [" (str/join ", " tags) "]\n"))
        (when seed (str "seed: " seed "\n"))
        "---\n\n"
+       (when (and (= type :reference) url)
+         (str "**Source:** [" url "](" url ")"
+              (when (seq (str author)) (str " · " author))
+              (when (seq (str date)) (str " · " date))
+              "\n\n"))
        (str/trim (or body "")) "\n"
        (when (and (seq sources) (not (re-find #"(?m)^## Sources" (str body))))
          (str "\n## Sources\n\n" (str/join "\n" (map #(str "- " %) sources)) "\n"))
