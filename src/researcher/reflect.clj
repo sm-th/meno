@@ -125,30 +125,6 @@
 ;; job 1: materialize — recurring bare URLs -> ingest tasks
 ;; --------------------------------------------------------------------------
 
-(defn materialize-sources!
-  "File ingest tasks for bare URLs cited in >= threshold notes that have neither a
-   reference card nor an open ingest task. Bounded by the WIP cap and :max-per-run."
-  [cfg]
-  (let [dir   (fresh-main! cfg)
-        thr   (get-in cfg [:reflect :ingest-threshold] 2)
-        cards (reference-index dir)
-        freq  (source-frequency dir)
-        open  (set (map #(str (get % "title")) (gh/open-issues cfg)))
-        cap   (get-in cfg [:planner :wip-cap] 10)
-        budget (max 0 (- cap (count open)))
-        want  (->> freq
-                   (filter (fn [[u files]]
-                             (and (>= (count files) thr)
-                                  (not (contains? cards u))
-                                  (not (contains? open (str "Ingest: " u))))))
-                   (sort-by (fn [[_ files]] (- (count files))))
-                   (map first))
-        pick  (take (min budget (get-in cfg [:reflect :max-per-run] 3)) want)]
-    (vec (for [u pick]
-           (do (runner/file-ingest-task!
-                 cfg u (str "Auto-queued by reflect — cited in these cards: "
-                            (str/join ", " (map #(card-link cfg dir %) (sort (get freq u)))) "."))
-               u)))))
 
 ;; --------------------------------------------------------------------------
 ;; job 2: relink — bare URLs that now have a card -> [[Card title]]
@@ -239,26 +215,47 @@
       (projects/add-to-backlog! cfg (get p "id") (get issue "node_id")))
     (get issue "number")))
 
-(defn materialize-concepts!
-  "File 'Add concept: X' tasks for dangling concept wikilinks referenced by >=
-   :concept-threshold cards, with no card and no open task. Bounded by WIP cap + :max-per-run."
+(defn candidates
+  "All fileable work as ONE ranked list, scored by INCOMING references (how many cards
+   point at it): dangling [[concepts]] by link count + recurring source URLs by citation
+   count, each >= its threshold and not already carded. Highest incoming count first, so a
+   heavily-cited source outranks a rarely-linked concept."
+  [cfg dir]
+  (let [cthr  (get-in cfg [:reflect :concept-threshold] 2)
+        sthr  (get-in cfg [:reflect :ingest-threshold] 2)
+        cards (reference-index dir)
+        concepts (->> (concept-frequency dir)
+                      (keep (fn [[_ {:keys [files title]}]]
+                              (when (>= (count files) cthr)
+                                {:kind :concept :title (str "Add concept: " title)
+                                 :name title :files files :score (count files)}))))
+        sources  (->> (source-frequency dir)
+                      (keep (fn [[u files]]
+                              (when (and (>= (count files) sthr) (not (contains? cards u)))
+                                {:kind :ingest :title (str "Ingest: " u) :url u
+                                 :files files :score (count files)}))))]
+    (sort-by (comp - :score) (concat concepts sources))))
+
+(defn top-up!
+  "Fill the board up to :planner :max-open OPEN issues with the highest-incoming-count
+   candidates, skipping anything already carded or queued. ONE prioritized queue across
+   concepts + sources (replaces per-type budgets) so useful sources aren't starved by
+   cheap concepts. Returns the filed titles."
   [cfg]
   (let [dir    (fresh-main! cfg)
-        thr    (get-in cfg [:reflect :concept-threshold] 2)
-        freq   (concept-frequency dir)
-        open   (set (map #(str (get % "title")) (gh/open-issues cfg)))
-        cap    (get-in cfg [:planner :wip-cap] 10)
-        budget (max 0 (- cap (count open)))
-        want   (->> freq
-                    (map second)
-                    (filter (fn [{:keys [files title]}]
-                              (and (>= (count files) thr)
-                                   (not (contains? open (str "Add concept: " title))))))
-                    (sort-by (fn [{:keys [files]}] (- (count files)))))
-        pick   (take (min budget (get-in cfg [:reflect :max-per-run] 3)) want)]
-    (vec (for [{:keys [title files]} pick]
-           (do (file-concept-task! cfg title (sort (map #(card-link cfg dir %) files)))
-               title)))))
+        open   (gh/open-issues cfg)
+        opent  (set (map #(str (get % "title")) open))
+        budget (max 0 (- (get-in cfg [:planner :max-open] 50) (count open)))
+        pick   (->> (candidates cfg dir)
+                    (remove #(contains? opent (:title %)))
+                    (take budget))]
+    (vec (for [c pick]
+           (do (case (:kind c)
+                 :concept (file-concept-task! cfg (:name c) (sort (map #(card-link cfg dir %) (:files c))))
+                 :ingest  (runner/file-ingest-task! cfg (:url c)
+                            (str "Auto-queued by reflect — cited in these cards: "
+                                 (str/join ", " (map #(card-link cfg dir %) (sort (:files c)))) ".")))
+               (:title c))))))
 
 ;; --------------------------------------------------------------------------
 ;; job 0: ingest-new — the standard new-article puller. Newest published blog
@@ -288,16 +285,18 @@
    the filed [{:title :url}]. The scheduled auto-ingest; pass a limit for a one-off."
   ([cfg] (ingest-new! cfg (get-in cfg [:reflect :ingest-new-per-run] 5)))
   ([cfg limit]
-   (let [dir   (fresh-main! cfg)
-         blog  (get-in cfg [:blog :root])
-         have  (set (keys (reference-index dir)))
-         openi (->> (gh/open-issues cfg) (map #(str (get % "title")))
-                    (filter #(str/starts-with? % "Ingest: "))
-                    (map #(str/replace % #"^Ingest:\s*" "")) set)
-         new   (->> (published-posts cfg)
-                    (remove #(contains? have (normalize-url (:url %))))
-                    (remove #(contains? openi (:url %)))
-                    (take limit))]
+   (let [dir    (fresh-main! cfg)
+         blog   (get-in cfg [:blog :root])
+         open   (gh/open-issues cfg)
+         have   (set (keys (reference-index dir)))
+         openi  (->> open (map #(str (get % "title")))
+                     (filter #(str/starts-with? % "Ingest: "))
+                     (map #(str/replace % #"^Ingest:\s*" "")) set)
+         budget (max 0 (- (get-in cfg [:planner :max-open] 50) (count open)))
+         new    (->> (published-posts cfg)
+                     (remove #(contains? have (normalize-url (:url %))))
+                     (remove #(contains? openi (:url %)))
+                     (take (min limit budget)))]
      (vec (for [{:keys [rel url]} new]
             (let [title (or (try (:title (note/load-note blog rel)) (catch Throwable _ nil)) url)]
               (runner/file-ingest-task! cfg url (str "Auto-ingest: new blog post — " title))
@@ -409,8 +408,10 @@
    the web — runs ONLY when uncovered questions exist, so an idle tick spends nothing).
    dry? runs the planner but prints the proposal instead of filing."
   [cfg & [{:keys [dry?]}]]
-  (if (open-research-pr? cfg)
-    {:skipped :research-pr-open}
+  (cond
+    (open-research-pr? cfg) {:skipped :research-pr-open}
+    (>= (count (gh/open-issues cfg)) (get-in cfg [:planner :max-open] 50)) {:skipped :queue-full}
+    :else
     (let [dir     (fresh-main! cfg)
           qmap    (question-sources dir)
           covered (into (research-card-titles dir) (research-issue-titles cfg))
@@ -505,7 +506,6 @@
   (locking recon-lock
     (let [safe (fn [label f] (try (f) (catch Throwable t
                                         (println "reconcile" label "error:" (.getMessage t)) nil)))]
-      {:ingest    (safe :materialize-sources  #(materialize-sources! cfg))
-       :concepts  (safe :materialize-concepts #(materialize-concepts! cfg))
+      {:topup     (safe :top-up #(top-up! cfg))
        :relinked  (count (or (safe :relink    #(relink-sources! cfg)) []))
        :changelog (safe :changelog            #(rebuild-changelog! cfg))})))

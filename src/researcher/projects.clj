@@ -159,10 +159,13 @@
     (ensure-collaborator! cfg (get p "id"))
     p))
 
+(defn- issue-body [cfg node-id]
+  (get-in (gql cfg "query($i:ID!){ node(id:$i){ ... on Issue { body } } }" {:i node-id}) ["node" "body"]))
+
 (defn promote-one!
-  "Auto-triage: move the oldest Backlog issue (No Status) to the approved (Todo)
-   status, but only when the board is idle — nothing already in Todo or In Progress —
-   so tasks advance one at a time. Returns the promoted {:number :title} or nil."
+  "Auto-triage: move the HOTTEST Backlog issue (most incoming references) to the approved
+   (Todo) status, but only when the board is idle (nothing in Todo or In Progress), so tasks
+   advance one at a time. Heat = number of linked cards in the issue body. nil if none/busy."
   [cfg]
   (when-let [p (find-project cfg)]
     (let [pid    (get p "id")
@@ -170,14 +173,15 @@
                       (keep (fn [it]
                               (when-let [c (get it "content")]
                                 {:item-id (get it "id") :number (get c "number")
-                                 :title   (get c "title")
-                                 :status  (get-in it ["status" "name"])
-                                 :state   (get c "state")})))
+                                 :node-id (get c "id") :title (get c "title")
+                                 :status  (get-in it ["status" "name"]) :state (get c "state")})))
                       (filter #(= "OPEN" (:state %))))
           todo   (get-in cfg [:projects :approved-status] "Todo")
           inprog (get-in cfg [:projects :in-progress-status] "In Progress")
           busy?  (some #(#{todo inprog} (:status %)) its)
-          nxt    (->> its (filter #(nil? (:status %))) (sort-by :number) first)]
+          backlog (filter #(nil? (:status %)) its)
+          heat   (fn [it] (count (re-seq #"\]\(" (str (issue-body cfg (:node-id it))))))
+          nxt    (when (seq backlog) (apply max-key heat backlog))]
       (when (and (not busy?) nxt)
         (set-status! cfg pid (:item-id nxt) todo)
         {:number (:number nxt) :title (:title nxt)}))))

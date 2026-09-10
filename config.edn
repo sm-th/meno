@@ -45,6 +45,7 @@
  ;; issues per run, and stay silent once :wip-cap open issues exist.
  :planner {:max-new-per-run 1
            :wip-cap 10
+           :max-open 50            ; hard cap on total OPEN issues; filers stop here
            :max-tasks-per-note 2}
 
  ;; Worker (Stage 2): one approved issue -> a per-issue branch -> PR. Runs in the
