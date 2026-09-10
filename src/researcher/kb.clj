@@ -4,14 +4,14 @@
   A flat local directory of discourse-graph Markdown pages (one idea per file:
   concept / source / question / claim / research). These files are the source of
   truth (git-versioned); everything else (published HTML, indexes) is derived.
-  The ingest agent reads and writes the KB only through these fns (granted at the
-  grant); `grep` computes the frontier without a build."
+  Bibliographic fields (url/author/date) live in the frontmatter so they're
+  machine-parsable and renderable — never prose in the body. The ingest agent
+  reads and writes the KB only through these fns; `grep` computes the frontier."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]))
 
 (defn root
-  "The KB directory. `:kb :root` from config (default \"kb\"); a leading ~ expands
-   to the user's home."
+  "The KB directory. `:kb :root` from config (default \"kb\"); a leading ~ expands."
   [cfg]
   (let [r (or (get-in cfg [:kb :root]) "kb")]
     (if (str/starts-with? r "~")
@@ -50,13 +50,26 @@
   [cfg title]
   (let [f (page-file cfg title)] (when (.exists f) (slurp f))))
 
+(defn- yfield
+  "A quoted YAML frontmatter line, or nil when the value is blank/absent."
+  [k v]
+  (when (and v (not (and (string? v) (str/blank? v))))
+    (str (name k) ": " (pr-str (str v)) "\n")))
+
 (defn write-page!
-  "Write/overwrite a page. page = {:title :type :body}. Returns {:wrote :title}.
-   The title is YAML-quoted so colons/specials in it can't break frontmatter."
-  [cfg {:keys [title type body]}]
+  "Write/overwrite a page. page = {:title :type :body :url :author :date :tags}.
+   Bibliographic fields go in the frontmatter (quoted); body is prose only."
+  [cfg {:keys [title type body url author date tags]}]
   (let [f       (page-file cfg title)
-        fmatter (str "---\ntitle: " (pr-str (str title))
-                     "\ntype: " (name (or type :concept)) "\n---\n\n")
+        fmatter (str "---\n"
+                     (yfield :title title)
+                     "type: " (name (or type :concept)) "\n"
+                     (yfield :url url)
+                     (yfield :author author)
+                     (yfield :date date)
+                     (when (seq tags)
+                       (str "tags: [" (str/join ", " (map #(pr-str (str %)) tags)) "]\n"))
+                     "---\n\n")
         existed (.exists f)]
     (io/make-parents f)
     (spit f (str fmatter (str/trim (str body)) "\n"))

@@ -20,16 +20,19 @@
        "  (read-page title)  -> a page's Markdown, or nil\n"
        "  (grep q)           -> titles of pages containing q\n"
        "  (fetch url)        -> readable text of an external URL\n"
-       "  (write-page {:title .. :type .. :body ..}) -> create/overwrite a page\n\n"
-       "Page types: :concept (canonical SHORT definition), :source (a digested reading, "
-       "cite its url in the body), :question (one open question), :claim (a subjective "
-       "position/take), :research (a worked answer). One idea per page.\n\n"
-       "Process: read the source; (list-kb) and (grep ...) to see what already exists; "
-       "then write the pages it warrants — a :concept per key idea, a :source for the "
-       "reading itself, :claim pages for positions taken, :question pages for what's left "
-       "open — each linking related pages as [[Canonical Title]] and citing sources. "
-       "UPDATE an existing page (read-page then write-page) instead of duplicating. Keep "
-       "pages atomic and short. When there is nothing more to file, stop."))
+       "  (write-page {:title :type :body :url :author :date :tags}) -> create/overwrite a page\n\n"
+       "Page types: :concept (canonical SHORT definition), :source (a digested reading), "
+       ":question (one open question), :claim (a subjective position/take), :research (a "
+       "worked answer). One idea per page.\n\n"
+       "Bibliographic data goes in FRONTMATTER, never prose: for a :source page, pass the "
+       "reading's :url (required), and :author / :date when known — do NOT write a 'Source: ...' "
+       "line in the body. The body is your digest (summary, key ideas, open questions).\n\n"
+       "Process: read the source; (list-kb) and (grep ...) to see what already exists; then "
+       "write the pages it warrants — a :source for the reading itself (url/author/date in "
+       "fields), a :concept per key idea, :claim pages for positions taken, :question pages for "
+       "what's left open — each linking related pages as [[Canonical Title]]. UPDATE an existing "
+       "page (read-page then write-page) instead of duplicating. Keep pages atomic and short. "
+       "When there is nothing more to file, stop."))
 
 (defn- vocab [cfg]
   {"list-kb"    (fn [] (mapv #(select-keys % [:title :type]) (kb/index cfg)))
@@ -43,7 +46,7 @@
    "read-page"  "(read-page title) — a page's Markdown or nil"
    "grep"       "(grep q) — titles of pages containing q"
    "fetch"      "(fetch url) — readable text of an external URL"
-   "write-page" "(write-page {:title :type :body}) — create/overwrite a page"})
+   "write-page" "(write-page {:title :type :body :url :author :date :tags}) — url/author/date go in frontmatter"})
 
 (defn grant-spec [cfg]
   {:vocab (vocab cfg) :docs docs :ctx-info {:role "ingest" :kb (kb/root cfg)}})
