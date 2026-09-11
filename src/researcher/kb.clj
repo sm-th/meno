@@ -72,7 +72,8 @@
                      (yfield :title title)
                      "type: " (name (or type :concept)) "\n"
                      (yfield :by (or by "Andy Smith"))
-                     (yfield :status status)
+                     (when (or status (= "claim" (name (or type :concept))))
+                       (yfield :status (or status "tentative")))
                      (yfield :url url)
                      (yfield :author author)
                      (yfield :date date)
