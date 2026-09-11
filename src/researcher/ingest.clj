@@ -24,7 +24,7 @@
        "  (fetch url)        -> readable text of an external URL\n"
        "  (search q)         -> [{:title :url :snippet}] web search for prior art / known theory\n"
        "  (similar text)     -> [{:title :type :score}] SEMANTIC nearest existing pages (dedup)\n"
-       "  (write-page {:title :type :body :url :author :date :tags}) -> create/overwrite a page\n\n"
+       "  (write-page {:title :type :body :url :author :date :tags :by :status}) -> create/overwrite a page\n\n"
        "Page types: :concept (canonical SHORT definition), :source (a digested reading), "
        ":question (one open question), :claim (a subjective position/take), :research (a "
        "worked answer). One idea per page.\n\n"
@@ -34,6 +34,13 @@
        ":source as 'Name (domain)' — e.g. 'Mosaic effect (en.wikipedia.org)', 'STORM: … "
        "(arxiv.org)' — so a reading never collides with a concept of the same name, and link it "
        "by that full title. Concept/claim/question pages keep clean names (no domain).\n\n"
+       "Epistemic tagging (every page): set :by to who originates the idea — \"Andy Smith\" for "
+       "his own posts, positions and framings; the external author for a claim/source reporting "
+       "someone else's finding (matches the source's author). Set :status to how much weight it "
+       "carries: \"established\" (definitional, or backed by strong/peer-reviewed/multiple "
+       "evidence, or Andy's settled position), \"tentative\" (single source, an opinion, "
+       "work-in-progress), or \"speculative\" (a hunch, provocation, or contested/unverified). "
+       "They render as an attribution line and a 🟢/🟡/🔴 dot after the title.\n\n"
        "Process — two phases:\n"
        " 1. DIGEST the given source: (list-kb) for the map; then for EACH idea before you write "
        "it, (similar \"<the idea in one sentence>\") to find the nearest existing pages — grep is "
@@ -66,6 +73,7 @@
    "fetch"      (fn [url] (reader/readable url))
    "search"     (fn [q] (search/web cfg q))
    "similar"    (fn [text] (recall/similar cfg text 5 nil))
+   "set-meta"   (fn [title kvs] (kb/set-meta! cfg title kvs))
    "write-page" (fn [page]
                   (let [r (kb/write-page! cfg page)]
                     (try (recall/index-page! cfg page) (catch Throwable _ nil))
@@ -78,7 +86,7 @@
    "fetch"      "(fetch url) — readable text of an external URL"
    "search"     "(search q) — [{:title :url :snippet}] web search for external prior art"
    "similar"    "(similar text) — [{:title :type :score}] semantic nearest existing pages"
-   "write-page" "(write-page {:title :type :body :url :author :date :tags}) — url/author/date go in frontmatter"})
+   "write-page" "(write-page {:title :type :body :url :author :date :tags :by :status}) — url/author/date/by/status go in frontmatter"})
 
 (defn grant-spec [cfg]
   {:vocab (vocab cfg) :docs docs :ctx-info {:role "ingest" :kb (kb/root cfg)}})
@@ -100,7 +108,11 @@
        "- EXTERNAL GROUNDING: a page grounded only in the author's own blog post is incomplete; the "
        "agent should connect ideas to external prior art via (search ...). Flag blog-only pages.\n"
        "- SOURCE NAMING: a :source title must end with its domain in parentheses, e.g. 'Mosaic "
-       "effect (en.wikipedia.org)'. Flag a :source titled like a bare concept.\n\n"
+       "effect (en.wikipedia.org)'. Flag a :source titled like a bare concept.\n"
+       "- EPISTEMIC TAGS: every page needs :by (\"Andy Smith\" for his own ideas, else the "
+       "external author) and a :status of established/tentative/speculative. Flag a missing or "
+       "clearly wrong tag — e.g. an external finding marked \"Andy Smith\", or a lone hunch "
+       "marked \"established\".\n\n"
        "Use `blocker` only when continuing would clearly write a duplicate or ungrounded page."))
 
 (defn ingest!

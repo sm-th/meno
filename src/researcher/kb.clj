@@ -66,11 +66,13 @@
 (defn write-page!
   "Write/overwrite a page. page = {:title :type :body :url :author :date :tags}.
    Bibliographic fields go in the frontmatter (quoted); body is prose only."
-  [cfg {:keys [title type body url author date tags]}]
+  [cfg {:keys [title type body url author date tags by status]}]
   (let [f       (page-file cfg title)
         fmatter (str "---\n"
                      (yfield :title title)
                      "type: " (name (or type :concept)) "\n"
+                     (yfield :by (or by "Andy Smith"))
+                     (yfield :status status)
                      (yfield :url url)
                      (yfield :author author)
                      (yfield :date date)
@@ -81,6 +83,22 @@
     (io/make-parents f)
     (spit f (str fmatter (str/trim (strip-leading-fm body)) "\n"))
     {:wrote (.getName f) :title title :amended existed}))
+
+(defn set-meta!
+  "Set frontmatter fields (map field->value) on an existing page, leaving the body
+   intact. For backfilling :by / :status without rewriting content."
+  [cfg title kvs]
+  (let [f (page-file cfg title)]
+    (when (.exists f)
+      (let [t (slurp f)
+            [_ fmb body] (re-find #"(?s)\A---\n(.*?)\n---\n?(.*)\z" t)
+            drop? (set (map name (keys kvs)))
+            kept  (remove (fn [ln] (some #(str/starts-with? ln (str % ":")) drop?))
+                          (str/split-lines (or fmb "")))
+            added (for [[k v] kvs :when (some? v)] (str (name k) ": " (pr-str (str v))))]
+        (spit f (str "---\n" (str/join "\n" (concat kept added)) "\n---\n\n"
+                     (str/trim (or body "")) "\n"))
+        {:set (.getName f)}))))
 
 (defn grep
   "Case-insensitive substring search across pages; returns matching titles."
