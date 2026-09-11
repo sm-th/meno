@@ -1,5 +1,6 @@
 {:paths ["src"]
- :deps {io.github.reflection-dev/zeno {:local/root "../../zeno"}
+ :deps {io.github.reflection-dev/zeno {:git/tag "v0.1.0"
+                                       :git/sha "4ea6180bf727fe06fb56dadf1ddda5c13a7703e5"}
         org.clojure/data.json {:mvn/version "2.5.1"}
         nrepl/nrepl {:mvn/version "1.3.1"}
         cider/cider-nrepl {:mvn/version "0.50.2"}}
