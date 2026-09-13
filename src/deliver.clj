@@ -48,5 +48,5 @@
    and the egress allowlist. Secret VALUES are not placed here."
   [{:keys [secrets plain egress]}]
   {:env       plain
-   :net-bound (mapv (fn [{:keys [env hosts]}] {:env env :host (first hosts)}) secrets)
+   :net-bound (mapv (fn [{:keys [env hosts]}] {:env env :host (str/join "," hosts)}) secrets)
    :egress    (vec egress)})

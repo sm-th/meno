@@ -32,6 +32,22 @@
         agents (into {} (for [[k m] (:machines inst)] [k (:identity m)]))]
     (provision/reconcile! (zid/adapter owner) agents)))
 
+(defn researcher-cfg
+  "Sandbox-delivery cfg for the researcher: instance :research merged with
+   network-bound secrets (GH_TOKEN + the Manifest ANTHROPIC_API_KEY) and broad
+   web egress. No Zulip creds — the wiki worker never talks to Zulip."
+  [inst]
+  (let [plan (deliver/plan {:machine  :researcher
+                            :accesses (get-in inst [:machines :researcher :accesses])
+                            :catalog  (:access-catalog inst)
+                            :identity nil})
+        spec (deliver/sandbox-spec plan)]
+    (merge (:research inst)
+           {:net-bound  (:net-bound spec)
+            :secret-env (reduce (fn [m {:keys [env value]}] (assoc m env value))
+                                {} (:secrets plan))
+            :egress     {:net "public"}})))
+
 (defn publisher-overrides
   "Fold the provisioned publisher bot + delivered accesses into publisher/build
    overrides (host delivery). Structural config comes from publisher.edn."
@@ -44,10 +60,11 @@
                             :zulip-site (env (:site-env z))
                             :zulip-host (:host z)})
         e    (deliver/env-map plan)
-        pcfg (pubcfg/load-config)]
+        pcfg (pubcfg/load-config)
+        rcfg (researcher-cfg inst)]
     {:ports  {:on-published (fn [source _config post published]
                               ((:mark-published! source) post)
-                              (research/ingest! (:research inst) published))}
+                              (research/ingest! rcfg published))}
      :config {:translate (:translate pcfg)
               :site      (:site pcfg)
               :source    (merge (:zulip pcfg)

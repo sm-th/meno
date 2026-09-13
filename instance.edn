@@ -13,15 +13,23 @@
  ;; How often the engine runs the publisher poll (zeno.loop schedules it).
  :poll-ms 60000
 
- ;; Researcher: a plain coding agent (omp) that ingests each published post into
- ;; the wiki repo (file + search + git tools; no Lisp graph DSL).
- :research {:wiki-root "~/sm-th/smith-wiki" :model "deepseek-v4-flash"}
+ ;; Researcher: a sandboxed omp agent (fresh per-post microVM) that ingests each
+ ;; published post into the wiki. ALL LLM traffic routes through the Manifest
+ ;; gateway; ANTHROPIC_API_KEY (Manifest) + GH_TOKEN are delivered network-bound,
+ ;; web egress is broad (read sources) but secrets can only reach their host.
+ :research {:wiki-repo    "https://github.com/agent-smith-wiki/smith-wiki.git"
+            :wiki-base    "main"
+            :image        "zeno-agent:base"
+            :manifest-url "https://llm.gradienthike.com/v1"
+            :model        "opencode-go/deepseek-v4-flash"
+            :git-name     "Agent Smith"
+            :git-email    "agent@smith.wiki"}
 
  ;; Machines. :identity -> a provisioned Zulip bot (chat persona + stream subs).
  ;; :accesses -> catalog keys; :sandboxed -> host env vs network-bound delivery.
  :machines
  {:researcher {:identity  {:chat "Meno Researcher" :streams ["blog" "research"]}
-               :accesses  [:github]        ; sandboxed agent -> GH_TOKEN network-bound
+               :accesses  [:github :llm]    ; sandboxed -> GH_TOKEN + Manifest key network-bound
                :sandboxed true}
   :publisher  {:identity  {:chat "Blog Publisher" :streams ["blog"]}
                :accesses  [:telegram]      ; host: git push via ssh key, not a delivered token
@@ -31,4 +39,5 @@
  ;; be delivered toward. reconcile does NOT create these — only delivers.
  :access-catalog
  {:github   {:secret "GH_TOKEN"           :hosts ["api.github.com" "github.com"]}
-  :telegram {:secret "TELEGRAM_BOT_TOKEN" :hosts ["api.telegram.org"]}}}
+  :telegram {:secret "TELEGRAM_BOT_TOKEN" :hosts ["api.telegram.org"]}
+  :llm      {:secret "ANTHROPIC_API_KEY"  :hosts ["llm.gradienthike.com"]}}}

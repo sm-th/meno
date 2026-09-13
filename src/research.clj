@@ -1,13 +1,12 @@
 (ns research
-  "Run the researcher on one published post: a plain coding agent (omp) with the
-   ordinary file + search + git tools — NO Lisp graph DSL. It reads/writes the
-   wiki's Markdown pages directly and commits. Best-effort; never throws into the
-   caller (it runs in a background future off the publish pass)."
+  "Ingest one published post into the wiki via a SANDBOXED omp worker: a coding
+   agent (omp, with its ordinary file/search/git tools) runs inside an ephemeral
+   microVM (zeno.sandbox) against a fresh wiki clone, with LLM + GitHub creds
+   network-bound and broad egress to fetch sources. NEVER on the host — the post
+   and any page it fetches are untrusted input. Best-effort; never throws."
   (:require [clojure.java.shell :as sh]
-            [clojure.string :as str]))
-
-(defn- expand [p]
-  (str/replace (str p) #"^~" (System/getProperty "user.home")))
+            [clojure.string :as str]
+            [zeno.sandbox :as sandbox]))
 
 (def system-prompt
   "You are meno's researcher. You grow a public Zettelkasten-style discourse-graph
@@ -61,20 +60,67 @@ DO THIS with the one source post you are given:
 Keep every page short and atomic — one idea per file.")
 
 (defn ingest!
-  "Ingest one published post {:title :body :site-url} into the wiki at cfg
-   :wiki-root via omp (tools on, auto-approve). Best-effort."
-  [{:keys [wiki-root model]} {:keys [title body site-url]}]
-  (try
-    (let [dir    (expand wiki-root)
-          prompt (str "SOURCE POST (" site-url "):\n\n# " title "\n\n" body)]
-      (println "researcher: ingesting" (pr-str title) "->" dir)
-      (let [{:keys [exit err]}
-            (sh/sh "omp" "-p" "--approval-mode" "yolo"
-                   "--model" (or model "claude-opus-4-8")
-                   "--system-prompt" system-prompt prompt
-                   :dir dir)]
-        (if (zero? exit)
-          (println "researcher: done —" (pr-str title))
-          (println "researcher: omp exit" exit "-" (str/trim (str err))))))
-    (catch Throwable t
-      (println "researcher: error —" (or (ex-message t) (str t))))))
+  "Run one published post {:title :body :site-url} through a sandboxed omp worker.
+   The worker's omp routes ALL LLM traffic through the Manifest gateway (a custom
+   openai-completions provider written at guest start from the network-bound
+   ANTHROPIC_API_KEY placeholder), never a provider directly. Retries the whole
+   sandboxed run on non-zero exit (a transient upstream stream drop kills the omp
+   session) up to :retries times (default 2 -> 3 attempts); the researcher is
+   idempotent (re-orients from the wiki's current state each run). cfg:
+   {:wiki-repo :wiki-base :image :manifest-url :model :git-name :git-email
+    :net-bound [{:env :host}] :secret-env {ENV VAL} :egress :retries}."
+  [{:keys [wiki-repo wiki-base image manifest-url model git-name git-email
+           net-bound secret-env egress retries]}
+   {:keys [title body site-url]}]
+  (let [max-att (inc (or retries 2))
+        env     {"OMP_TASK"     (str "SOURCE POST (" site-url "):\n\n# " title "\n\n" body)
+                 "OMP_SYS"      system-prompt
+                 "MANIFEST_URL" (or manifest-url "https://llm.gradienthike.com/v1")
+                 "MODEL_ID"     (or model "opencode-go/deepseek-v4-flash")
+                 "GIT_AUTHOR_NAME"     (or git-name "Agent Smith")
+                 "GIT_AUTHOR_EMAIL"    (or git-email "agent@smith.wiki")
+                 "GIT_COMMITTER_NAME"  (or git-name "Agent Smith")
+                 "GIT_COMMITTER_EMAIL" (or git-email "agent@smith.wiki")}
+        argv    ["/bin/sh" "-c"
+                 (str "mkdir -p /root/.omp/agent && "
+                      "printf 'providers:\\n  manifest:\\n    baseUrl: %s\\n"
+                      "    api: openai-completions\\n    apiKey: \"%s\"\\n"
+                      "    models:\\n      - id: %s\\n' "
+                      "\"$MANIFEST_URL\" \"$ANTHROPIC_API_KEY\" \"$MODEL_ID\" "
+                      "> /root/.omp/agent/models.yml && "
+                      "cd /repos/wiki && printf %s \"$OMP_TASK\" | "
+                      "omp -p --approval-mode yolo "
+                      "--model \"manifest/$MODEL_ID\" --system-prompt \"$OMP_SYS\"")]
+        run-once
+        (fn []
+          (let [work  (str (or (System/getenv "TMPDIR") "/tmp/") "meno-wiki-"
+                           (System/currentTimeMillis))
+                clone (sh/sh "git" "clone" "--depth" "1" "--branch" (or wiki-base "main")
+                             wiki-repo work)]
+            (if-not (zero? (:exit clone))
+              {:exit 1 :err (str "wiki clone failed: " (str/trim (str (:err clone))))}
+              (try
+                (sandbox/run {:image      (or image "zeno-agent:base")
+                              :workdir    "/repos/wiki"
+                              :mounts     [{:src work :dst "/repos/wiki"}]
+                              :env        env
+                              :net-bound  net-bound
+                              :secret-env secret-env
+                              :egress     (or egress {:net "public"})
+                              :timeout    "20m"
+                              :argv       argv})
+                (finally (sh/sh "rm" "-rf" work))))))]
+    (try
+      (loop [attempt 1]
+        (println "researcher: ingesting" (pr-str title) "in sandbox — attempt"
+                 attempt "/" max-att)
+        (let [{:keys [exit err] :as r} (run-once)]
+          (cond
+            (zero? exit)        (do (println "researcher: done —" (pr-str title)) r)
+            (< attempt max-att) (do (println "researcher: attempt" attempt "failed (exit"
+                                             exit "):" (str/trim (str err)) "— retrying")
+                                    (recur (inc attempt)))
+            :else               (do (println "researcher: gave up after" max-att
+                                             "attempts —" (str/trim (str err))) r))))
+      (catch Throwable t
+        (println "researcher: error —" (or (ex-message t) (str t)))))))
