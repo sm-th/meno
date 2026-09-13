@@ -1,12 +1,12 @@
 (ns publisher.zulip
   "Zulip source adapter — the #blog stream is the input. A new post is a topic
-   whose name does not yet carry the done marker (✔). Publishing replies into the
-   thread; marking done resolves the topic. Talks to the Zulip REST API with
-   HTTP Basic auth (bot email : API key).
+   that is neither resolved (✔, a human closed it) nor already carries the
+   publisher's reaction. Publishing sends replies into the thread and adds the
+   reaction (📢) — it does NOT resolve, so the thread stays open for the
+   researcher. Talks to the Zulip REST API with HTTP Basic auth (bot email : key).
 
-   Builds the generic :source port {:list-new :reply! :mark-done!} the publisher
-   machine consumes, so another bus (Discourse, …) can be swapped in by providing
-   the same shape."
+   Builds the generic :source port {:list-new :reply! :mark-published!}, so
+   another bus (Discourse, …) can be swapped in by providing the same shape."
   (:require [shared.http :as http]
             [clojure.data.json :as json]
             [clojure.string :as str])
@@ -62,22 +62,25 @@
     (first (:messages res))))
 
 (defn adapter
-  "Build the :source port from cfg {:site :email :api-key :stream :skip}."
+  "Build the :source port from cfg {:site :email :api-key :stream :skip
+   :published-emoji}."
   [{:keys [stream skip] :or {stream "blog"} :as cfg}]
-  (let [skip (set skip)]
+  (let [skip  (set skip)
+        emoji (get cfg :published-emoji "loudspeaker")]
     {:list-new
      (fn []
        (let [sid (stream-id cfg stream)]
          (->> (topics cfg sid)
-              (remove #(str/starts-with? (str (:name %)) done-mark))
+              (remove #(str/starts-with? (str (:name %)) done-mark))   ; resolved by a human
               (remove #(skip (:name %)))
               (keep (fn [{:keys [name]}]
                       (when-let [m (first-message cfg stream name)]
-                        {:id      (:id m)
-                         :topic   name
-                         :stream  stream
-                         :content (:content m)
-                         :at      (Instant/ofEpochSecond (:timestamp m))})))
+                        (when-not (some #(= emoji (:emoji_name %)) (:reactions m))
+                          {:id      (:id m)
+                           :topic   name
+                           :stream  stream
+                           :content (:content m)
+                           :at      (Instant/ofEpochSecond (:timestamp m))}))))
               vec)))
 
      :reply!
@@ -85,10 +88,7 @@
        (send-form cfg :post "/messages"
                   {:type "stream" :to (:stream post) :topic (:topic post) :content text}))
 
-     :mark-done!
+     :mark-published!
      (fn [post]
-       (send-form cfg :patch (str "/messages/" (:id post))
-                  {:topic (str done-mark (:topic post))
-                   :propagate_mode "change_all"
-                   :send_notification_to_old_thread false
-                   :send_notification_to_new_thread false}))}))
+       (send-form cfg :post (str "/messages/" (:id post) "/reactions")
+                  {:emoji_name emoji}))}))

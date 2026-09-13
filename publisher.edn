@@ -18,7 +18,7 @@
         :branch       "main"
         :posts-subdir "src"
         :zone         "+07:00"
-        :push?        false
+        :push?        true
         :git {:ssh-key         "~/.ssh/id_alchery"
               :user-name       "Andy Smith"
               :user-email      "me@andysmith.ai"

@@ -8,7 +8,14 @@
 {:zulip {:site-env       "ZULIP_SITE"
          :owner-email-env "ZULIP_OWNER_EMAIL"
          :owner-key-env  "ZULIP_OWNER_API_KEY"
-         :host           "andysmith.zulipchat.com"}   ; egress host for network-bound bot keys
+         :host           "chat.gradienthike.com"}   ; egress host for a sandboxed agent's network-bound bot key
+
+ ;; How often the engine runs the publisher poll (zeno.loop schedules it).
+ :poll-ms 60000
+
+ ;; Researcher: a plain coding agent (omp) that ingests each published post into
+ ;; the wiki repo (file + search + git tools; no Lisp graph DSL).
+ :research {:wiki-root "~/sm-th/smith-wiki" :model "claude-opus-4-8"}
 
  ;; Machines. :identity -> a provisioned Zulip bot (chat persona + stream subs).
  ;; :accesses -> catalog keys; :sandboxed -> host env vs network-bound delivery.

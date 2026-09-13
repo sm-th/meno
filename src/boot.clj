@@ -7,6 +7,7 @@
             [deliver :as deliver]
             [publisher.machine :as pub]
             [publisher.config :as pubcfg]
+            [research :as research]
             [clojure.edn :as edn]
             [clojure.string :as str]
             [clojure.walk :as walk]))
@@ -44,7 +45,10 @@
                             :zulip-host (:host z)})
         e    (deliver/env-map plan)
         pcfg (pubcfg/load-config)]
-    {:config {:translate (:translate pcfg)
+    {:ports  {:on-published (fn [source _config post published]
+                              ((:mark-published! source) post)
+                              (future (research/ingest! (:research inst) published)))}
+     :config {:translate (:translate pcfg)
               :site      (:site pcfg)
               :source    (merge (:zulip pcfg)
                                 {:site    (get e "ZULIP_SITE")
@@ -52,10 +56,20 @@
                                  :api-key (get e "ZULIP_API_KEY")})
               :channel   (merge (:telegram pcfg) {:token (get e "TELEGRAM_BOT_TOKEN")})}}))
 
-(defn -main [& _]
+(defn setup!
+  "Provision identities once; return {:poll-ms :step}. `step` runs one publisher
+   poll pass. The engine (zeno.loop) schedules it — the instance never loops."
+  []
   (let [inst (load-instance)
         ids  (provision! inst)]
     (println "provisioned:" (vec (keys ids)))
-    (let [pubm (pub/build (publisher-overrides inst ids))]
-      (doseq [r ((:run pubm))]
-        (println "published:" (:topic r) "->" (:site-url r) "|" (:tg-url r))))))
+    {:poll-ms (get inst :poll-ms 60000)
+     :step (fn []
+             (let [pubm (pub/build (publisher-overrides inst ids))]
+               (doseq [r ((:run pubm))]
+                 (println "published:" (:topic r) "->" (:site-url r) "|" (:tg-url r)))))}))
+
+(defn -main
+  "One-shot: provision + one publisher pass (for manual `clojure -M` runs)."
+  [& _]
+  ((:step (setup!))))

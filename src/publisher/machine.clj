@@ -30,10 +30,12 @@
   (let [{:keys [title body] :as en} (translate (:translate config) (:content post))
         {site-url :url} (site (:site config) en (:at post))]
     ((:reply! source) post (str site-url "\n\n" (spoiler title body)))
-    (let [{tg-url :url} (channel (:channel config) (str body "\n\n" site-url))]
+    (let [{tg-url :url} (channel (:channel config) {:title title :body body :site-url site-url})
+          published {:title title :body body :site-url site-url :tg-url tg-url
+                     :post-id (:id post) :topic (:topic post)}]
       ((:reply! source) post (str tg-url "\n\n" body))
-      (on-published source config post)
-      {:post-id (:id post) :topic (:topic post) :site-url site-url :tg-url tg-url})))
+      (on-published source config post published)
+      published)))
 
 (defn poll-once!
   "Publish every currently-new post once. Idempotent: the done marker keeps a
@@ -46,8 +48,9 @@
             :site         site/publish!
             :channel      telegram/send-post!
             :make-source  zulip/adapter
-            ;; done policy — overridable: default resolves the thread here.
-            :on-published (fn [source _config post] ((:mark-done! source) post))}
+            ;; done policy — overridable: default reacts (marks published), never
+            ;; resolves, so the thread stays open for the researcher.
+            :on-published (fn [source _config post _published] ((:mark-published! source) post))}
    :config {:translate {:model "claude-opus-4-8"}
             :source    {:stream "blog"}
             :site      {:branch "main" :posts-subdir "src" :zone "+07:00"}
