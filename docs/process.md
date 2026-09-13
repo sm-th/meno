@@ -1,5 +1,9 @@
 # How Meno researches — the process
 
+> **Scope: the RESEARCHER machine.** This describes one machine wired by this zeno
+> config (see the top-level [`README.md`](../README.md)); the publisher machine and the
+> instance glue are documented separately.
+
 Meno continuously turns notes into a linked research wiki. This document describes the
 **process as it is implemented today** — the operational loop it runs, the research
 method it applies at each step, and the rules that govern both. It is not a description

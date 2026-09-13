@@ -1,5 +1,9 @@
 # Meno — target design
 
+> **Scope: the RESEARCHER machine.** This describes one machine wired by this zeno
+> config (see the top-level [`README.md`](../README.md)); the publisher machine and the
+> instance glue are documented separately.
+
 > **Status: direction, not current state.** This records the design we're converging
 > on. What's *built today* is described in [`process.md`](./process.md) and
 > [`zeno.md`](./zeno.md) and differs substantially (GitHub Projects board, blog-as-input,
