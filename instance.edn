@@ -15,7 +15,7 @@
 
  ;; Researcher: a plain coding agent (omp) that ingests each published post into
  ;; the wiki repo (file + search + git tools; no Lisp graph DSL).
- :research {:wiki-root "~/sm-th/smith-wiki" :model "claude-opus-4-8"}
+ :research {:wiki-root "~/sm-th/smith-wiki" :model "deepseek-v4-flash"}
 
  ;; Machines. :identity -> a provisioned Zulip bot (chat persona + stream subs).
  ;; :accesses -> catalog keys; :sandboxed -> host env vs network-bound delivery.
