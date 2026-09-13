@@ -47,7 +47,7 @@
         pcfg (pubcfg/load-config)]
     {:ports  {:on-published (fn [source _config post published]
                               ((:mark-published! source) post)
-                              (future (research/ingest! (:research inst) published)))}
+                              (research/ingest! (:research inst) published))}
      :config {:translate (:translate pcfg)
               :site      (:site pcfg)
               :source    (merge (:zulip pcfg)
