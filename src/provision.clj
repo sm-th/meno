@@ -13,24 +13,27 @@
       (str/replace #"^-+|-+$" "")))
 
 (defn reconcile!
-  "adapter: {:list-bots :create-bot! :regenerate! :list-streams :subscribe!}
-   agents:  {agent-key {:chat \"Full Name\" :streams [\"blog\" …]}}"
-  [{:keys [list-bots create-bot! regenerate! list-streams subscribe!]} agents]
+  "adapter: {:list-bots :create-bot! :list-streams :subscribe!}
+   agents:  {agent-key {:chat \"Full Name\" :streams [\"blog\" …]}}
+   Returns {agent-key {:email :api-key}}. (GET /bots exposes :username =
+   the bot email + :api_key, but no user_id, so we read the key rather than
+   rotate it.)"
+  [{:keys [list-bots create-bot! list-streams subscribe!]} agents]
   (let [existing (set (list-streams))
         have0    (into {} (map (juxt :full_name identity)) (list-bots))]
-    ;; 1. create any missing bots (POST /bots returns no :email, so we re-list next)
+    ;; 1. create any missing bots
     (doseq [[_ {:keys [chat]}] agents]
       (when-not (have0 chat)
         (create-bot! {:full-name chat :short-name (slug chat)})))
-    ;; 2. re-list -> canonical records (:email, :user_id); rotate + subscribe by user id
+    ;; 2. re-list -> canonical records (:username = email, :api_key); subscribe by email
     (let [have (into {} (map (juxt :full_name identity)) (list-bots))]
       (into {}
             (for [[k {:keys [chat streams]}] agents]
               (let [bot     (have chat)
-                    api-key (regenerate! (:user_id bot))          ; rotate-on-boot
+                    email   (:username bot)
                     present (filter existing streams)]
-                (when (seq present) (subscribe! (:user_id bot) (vec present)))
+                (when (seq present) (subscribe! email (vec present)))
                 (doseq [s (remove existing streams)]
                   (println "WARN provision:" k "→ stream" (pr-str s)
                            "does not exist; skipped (not created)"))
-                [k {:email (:email bot) :api-key api-key :user-id (:user_id bot)}]))))))
+                [k {:email email :api-key (:api_key bot)}]))))))

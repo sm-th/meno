@@ -43,7 +43,7 @@
    :regenerate!  (fn [bot-id]
                    (:api_key (call cfg :post (str "/bots/" bot-id "/api_key/regenerate") {})))
    :list-streams (fn [] (mapv :name (:streams (call cfg :get "/streams" {}))))
-   :subscribe!   (fn [user-id streams]
+   :subscribe!   (fn [email streams]
                    (call cfg :post "/users/me/subscriptions"
                          {:form {:subscriptions (json/write-str (mapv (fn [s] {:name s}) streams))
-                                 :principals    (json/write-str [user-id])}}))})
+                                 :principals    (json/write-str [email])}}))})
