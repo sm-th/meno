@@ -1,15 +1,19 @@
 (ns publisher.machine
   "The publisher machine: a new note in #blog -> a site post + a Telegram repost,
-   with the links sent back as replies in the thread, then the thread marked done.
+   with the links sent back as replies in the thread, then the note reacted (📢)
+   and handed to the researcher.
+
+   Idempotent: each externally-visible step checks the thread for its receipt (the
+   reply carrying the link) and skips it if already there — so a retry after a
+   mid-pipeline failure resumes instead of duplicating.
 
    Ships default adapters (Zulip source, 11ty site, Telegram channel, Manifest
-   translate). `build` deep-merges overrides, so a consumer swaps any facade: a
-   different source bus (Discourse), a different channel, or the done policy
-   (e.g. let the researcher resolve the thread after it ingests, not here)."
+   translate). `build` deep-merges overrides, so a consumer swaps any facade."
   (:require [publisher.zulip :as zulip]
             [publisher.site :as site]
             [publisher.telegram :as telegram]
-            [publisher.translate :as translate]))
+            [publisher.translate :as translate]
+            [clojure.string :as str]))
 
 (defn deep-merge
   "Recursively merge maps; a non-nil scalar in `b` overrides `a`."
@@ -22,26 +26,45 @@
 (defn- spoiler [title body]
   (str "```spoiler " (or title "post") "\n" body "\n```"))
 
+(defn- site-host [config]
+  (-> (get-in config [:site :site-url] "")
+      (str/replace #"^https?://" "")
+      (str/split #"/") first))
+
 (defn publish-one!
-  "Run the full pipeline for one source post. Sends TWO replies into the thread
-   (site link + spoilered text, then Telegram link + text), never editing the
-   original, and finally applies the done policy. Returns a summary."
+  "Process one source post, idempotently. Each external step reuses the URL
+   already posted as a reply in the thread (a prior receipt) or does the step and
+   posts the receipt: translate -> [site + reply] -> [telegram + reply] ->
+   on-published (react + researcher)."
   [{:keys [translate site channel on-published]} config source post]
   (let [{:keys [title body] :as en} (translate (:translate config) (:content post))
-        {site-url :url} (site (:site config) en (:at post))]
-    ((:reply! source) post (str site-url "\n\n" (spoiler title body)))
-    (let [{tg-url :url} (channel (:channel config) {:title title :body body :site-url site-url})
-          published {:title title :body body :site-url site-url :tg-url tg-url
-                     :post-id (:id post) :topic (:topic post)}]
-      ((:reply! source) post (str tg-url "\n\n" body))
-      (on-published source config post published)
-      published)))
+        find-link (or (:find-link source) (constantly nil))
+        site-url  (or (find-link post (site-host config))
+                      (let [{u :url} (site (:site config) en (:at post))]
+                        ((:reply! source) post (str u "\n\n" (spoiler title body)))
+                        u))
+        tg-url    (or (find-link post "t.me")
+                      (let [{u :url} (channel (:channel config)
+                                             {:title title :body body :site-url site-url})]
+                        ((:reply! source) post (str u "\n\n" body))
+                        u))
+        published {:title title :body body :site-url site-url :tg-url tg-url
+                   :post-id (:id post) :topic (:topic post)}]
+    (on-published source config post published)
+    published))
 
 (defn poll-once!
-  "Publish every currently-new post once. Idempotent: the done marker keeps a
-   post from being republished on the next pass."
+  "Publish every currently-new post once, isolating per-post failures so one bad
+   post doesn't block the rest of the batch (nor stall the loop)."
   [ports config source]
-  (mapv #(publish-one! ports config source %) ((:list-new source))))
+  (->> ((:list-new source))
+       (keep (fn [post]
+               (try (publish-one! ports config source post)
+                    (catch Throwable t
+                      (println "!! publish" (pr-str (:topic post)) "failed:"
+                               (or (ex-message t) (str t)))
+                      nil))))
+       vec))
 
 (def defaults
   {:ports  {:translate    translate/translate
@@ -57,10 +80,8 @@
             :channel   {:disable-preview true}}})
 
 (defn build
-  "Assemble the machine. `overrides` deep-merges onto `defaults`: replace any
-   facade under :ports (e.g. :make-source discourse/adapter, :on-published a
-   no-op) or any per-adapter values under :config. Returns the merged map plus
-   :source (the built source port) and :run (poll once)."
+  "Assemble the machine. `overrides` deep-merges onto `defaults`. Returns the
+   merged map plus :source (the built source port) and :run (one poll pass)."
   [overrides]
   (let [{:keys [ports config] :as m} (deep-merge defaults overrides)
         source ((:make-source ports) (:source config))]

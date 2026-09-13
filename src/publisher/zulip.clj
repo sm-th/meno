@@ -61,6 +61,14 @@
                                   :apply_markdown false :narrow narrow})]
     (first (:messages res))))
 
+(defn- topic-messages
+  "All messages in a topic (oldest first), raw Markdown."
+  [cfg stream topic]
+  (let [narrow (json/write-str [{:operator "stream" :operand stream}
+                                {:operator "topic"  :operand topic}])]
+    (:messages (GET cfg "/messages" {:anchor "oldest" :num_before 0 :num_after 200
+                                     :apply_markdown false :narrow narrow}))))
+
 (defn adapter
   "Build the :source port from cfg {:site :email :api-key :stream :skip
    :published-emoji}."
@@ -82,6 +90,17 @@
                            :content (:content m)
                            :at      (Instant/ofEpochSecond (:timestamp m))}))))
               vec)))
+
+     :find-link
+     ;; A URL containing `substr` already posted as a REPLY in the thread (a prior
+     ;; step's receipt) — lets a step skip itself idempotently. Scans replies only
+     ;; (skips the original note, so the note's own links don't false-positive).
+     (fn [post substr]
+       (->> (topic-messages cfg (:stream post) (:topic post))
+            rest
+            (mapcat #(re-seq #"https?://[^\s)]+" (str (:content %))))
+            (filter #(str/includes? % substr))
+            first))
 
      :reply!
      (fn [post text]
