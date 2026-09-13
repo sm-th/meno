@@ -1,0 +1,30 @@
+;; Publisher machine — instance config (Andy's setup). Secrets are NOT here; they
+;; come from the environment via secretspec: ZULIP_SITE / ZULIP_EMAIL /
+;; ZULIP_API_KEY (source) and TELEGRAM_BOT_TOKEN (channel). Paths starting with ~
+;; expand to $HOME at load time. Any of these facades can be overridden by a
+;; consumer that wires the machine differently (a different source or channel).
+{:poll-ms 60000
+
+ ;; Translation — Anthropic-compatible gateway (Manifest), via ANTHROPIC_BASE_URL
+ ;; / ANTHROPIC_API_KEY in env.
+ :translate {:model "claude-opus-4-8"}
+
+ ;; Source: the Zulip #blog stream. A new post is a topic without the ✔ marker.
+ :zulip {:stream "blog" :skip []}
+
+ ;; Site: the 11ty repo. Commit + push auto-deploys; the URL is day-level.
+ :site {:clone-dir    "~/andysmith-ai/andysmith.ai"
+        :site-url     "https://andysmith.ai"
+        :branch       "main"
+        :posts-subdir "src"
+        :zone         "+07:00"
+        :push?        true
+        :git {:ssh-key         "~/.ssh/id_alchery"
+              :user-name       "Andy Smith"
+              :user-email      "me@andysmith.ai"
+              :sign            true
+              :signing-key     "~/.ssh/id_alchery.pub"
+              :allowed-signers "~/.ssh/allowed_signers"}}
+
+ ;; Channel: the Telegram channel (public). Token from TELEGRAM_BOT_TOKEN.
+ :telegram {:chat-id "@andysmith_ai" :username "andysmith_ai"}}
