@@ -1,0 +1,27 @@
+;; Instance description — the fleet of machines this orchestrator runs, their
+;; chat identities (provisioned as Zulip bots), and the accesses each needs.
+;; This is the single source of truth: edit it, reconcile converges.
+;;
+;; Secrets are NOT here. Per-machine values live in the orchestrator's store as
+;; <MACHINE>_<SECRET> (e.g. PUBLISHER_GH_TOKEN); the Zulip owner creds and realm
+;; come from env: ZULIP_SITE / ZULIP_OWNER_EMAIL / ZULIP_OWNER_API_KEY.
+{:zulip {:site-env       "ZULIP_SITE"
+         :owner-email-env "ZULIP_OWNER_EMAIL"
+         :owner-key-env  "ZULIP_OWNER_API_KEY"
+         :host           "andysmith.zulipchat.com"}   ; egress host for network-bound bot keys
+
+ ;; Machines. :identity -> a provisioned Zulip bot (chat persona + stream subs).
+ ;; :accesses -> catalog keys; :sandboxed -> host env vs network-bound delivery.
+ :machines
+ {:researcher {:identity  {:chat "Meno Researcher" :streams ["blog" "research"]}
+               :accesses  [:github]        ; sandboxed agent -> GH_TOKEN network-bound
+               :sandboxed true}
+  :publisher  {:identity  {:chat "Blog Publisher" :streams ["blog"]}
+               :accesses  [:telegram]      ; host: git push via ssh key, not a delivered token
+               :sandboxed false}}
+
+ ;; Access catalog: pre-existing secrets (you created them) + the hosts each may
+ ;; be delivered toward. reconcile does NOT create these — only delivers.
+ :access-catalog
+ {:github   {:secret "GH_TOKEN"           :hosts ["api.github.com" "github.com"]}
+  :telegram {:secret "TELEGRAM_BOT_TOKEN" :hosts ["api.telegram.org"]}}}
