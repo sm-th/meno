@@ -36,13 +36,12 @@ identity is recomputed on boot.
 an identity adapter (owner-cred), for each machine's `:identity` it —
 
 1. **creates** the bot if a bot of that full name doesn't already exist;
-2. **rotates** its API key on every boot (`regenerate!`) — nothing is persisted; the
-   orchestrator holds the fresh key in memory only;
+2. **reads** its API key from `GET /bots` each boot (this Zulip build returns the bot's
+   `:username` = email + `:api_key`, but no user id) — nothing stored; held in memory only;
 3. **subscribes** it to its declared `:streams` — **existing streams only**; a missing
    stream is warned and skipped, never created.
 
-It is idempotent: a re-run converges. It returns `{machine-key {:email :api-key
-:user-id}}`.
+It is idempotent: a re-run converges. It returns `{machine-key {:email :api-key}}`.
 
 [`zulip_identity/adapter`](../src/zulip_identity.clj) implements the port
 (`list-bots` / `create-bot!` / `regenerate!` / `list-streams` / `subscribe!`) against
@@ -64,7 +63,7 @@ they live in the store as `<MACHINE>_<SECRET>`.
 - **lookup** — `resolve-secret` reads `<MACHINE>_<SECRET>` (e.g. `RESEARCHER_GH_TOKEN`),
   falling back to a flat `<SECRET>` for the transition. The machine always sees the
   **canonical name** (`GH_TOKEN`) — the prefix never leaks into machine code.
-- if the machine has a provisioned identity, its rotated Zulip key rides along as
+- if the machine has a provisioned identity, its Zulip key rides along as
   `ZULIP_API_KEY` (bound to the realm host), with `ZULIP_EMAIL` / `ZULIP_SITE` as plain
   env.
 

@@ -39,8 +39,8 @@ Two cross-cutting concerns, generic and machine-agnostic (candidates to move int
 core), described in [`docs/provisioning.md`](docs/provisioning.md):
 
 - **Identity provisioning** — each machine's `:identity` in [`instance.edn`](instance.edn)
-  is reconciled into a **Zulip bot**: created if missing, its API key **rotated on every
-  boot** (nothing persisted), subscribed to its declared streams (existing ones only).
+  is reconciled into a **Zulip bot**: created if missing, its API key **read from Zulip
+  each boot** (nothing stored in the config), subscribed to its declared streams (existing ones only).
   Bots can't create bots, so the creator is an **owner admin account** bootstrapped once
   by [`botfather`](src/botfather.clj).
 - **Access delivery** — [`deliver`](src/deliver.clj) resolves each machine's declared
@@ -58,7 +58,7 @@ core), described in [`docs/provisioning.md`](docs/provisioning.md):
 | [`instance.edn`](instance.edn) | The fleet: machines, their chat identities + accesses, the access catalog, and the Zulip owner/realm env keys. Single source of truth. |
 | [`publisher.edn`](publisher.edn) | The publisher machine's structural config (source stream, 11ty repo, Telegram channel). Secrets are not here. |
 | [`src/boot.clj`](src/boot.clj) | Instance boot: load `instance.edn`, provision identities, deliver accesses, build + run. Knows which machines exist. |
-| [`src/provision.clj`](src/provision.clj) | Generic identity reconcile (create / rotate-on-boot / subscribe). Machine-agnostic. |
+| [`src/provision.clj`](src/provision.clj) | Generic identity reconcile (create / subscribe / read the bot's key). Machine-agnostic. |
 | [`src/deliver.clj`](src/deliver.clj) | Generic access delivery: per-machine secrets under canonical names; `env-map` (host) vs `sandbox-spec` (network-bound). |
 | [`src/zulip_identity.clj`](src/zulip_identity.clj) | Owner-cred Zulip REST adapter (list/create bots, regenerate key, list/subscribe streams). |
 | [`src/botfather.clj`](src/botfather.clj) | One-time owner bootstrap: `create` a fresh admin account or `adopt` one you made by hand. Stores `ZULIP_OWNER_*` in secretspec. |
@@ -69,8 +69,8 @@ core), described in [`docs/provisioning.md`](docs/provisioning.md):
 
 ## Bootstrap and run
 
-The owner admin account is the **one bootstrap secret**; bot keys rotate on boot, so
-nothing else about identity is persisted.
+The owner admin account is the **one bootstrap secret**; the bots' keys live in Zulip
+(the owner reads them each boot), so nothing else about identity is stored here.
 
 1. **Bootstrap the owner** (once). `botfather` mints or adopts an admin *user* account
    (bots can't create bots) and stores `ZULIP_OWNER_EMAIL` + `ZULIP_OWNER_API_KEY` in
