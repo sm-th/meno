@@ -28,7 +28,9 @@
                        :form    form
                        :timeout 60})]
     (when-not (and (= 200 status) (= "success" (:result body)))
-      (throw (ex-info "zulip-identity: request failed" {:status status :path path :body body})))
+      (throw (ex-info (str "zulip-identity: " (or (:msg body) "request failed")
+                           " [" (:code body) "] " (name method) " " path)
+                      {:status status :path path :body body})))
     body))
 
 (defn adapter
@@ -41,7 +43,7 @@
    :regenerate!  (fn [bot-id]
                    (:api_key (call cfg :post (str "/bots/" bot-id "/api_key/regenerate") {})))
    :list-streams (fn [] (mapv :name (:streams (call cfg :get "/streams" {}))))
-   :subscribe!   (fn [bot-email streams]
+   :subscribe!   (fn [user-id streams]
                    (call cfg :post "/users/me/subscriptions"
                          {:form {:subscriptions (json/write-str (mapv (fn [s] {:name s}) streams))
-                                 :principals    (json/write-str [bot-email])}}))})
+                                 :principals    (json/write-str [user-id])}}))})
