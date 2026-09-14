@@ -74,8 +74,11 @@ The plan is then materialized in one of two shapes:
 - **`sandbox-spec`** — **sandboxed** agent: plain (non-secret) values as env, but each
   secret is **network-bound** — `msb --secret ENV@HOST`, the value released only toward
   its allowed `:host`, plus an egress allowlist. Values never go on the argv and never
-  hit VM disk. The researcher (`:sandboxed true`) is delivered this way; its `GH_TOKEN`
-  is bound to `api.github.com` / `github.com`.
+  hit VM disk; the guest sees only an `$MSB_<ENV>` placeholder. msb injects the real
+  value even inside git's base64 Basic-auth, so the agent's own `git clone`/`git push`
+  work from the box with a network-bound token. The researcher (`:sandboxed true`) is
+  delivered this way — `GH_TOKEN@github` (clone + push) and `ANTHROPIC_API_KEY@manifest`
+  (LLM) — and does everything inside one microVM; the host only spawns it.
 
 ## Where it runs
 

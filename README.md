@@ -29,7 +29,10 @@ repos over time) plus the generic glue that gives them chat identities and secre
 - **RESEARCHER** — an auto-researcher that turns the author's notes into a densely
   `[[wikilinked]]` **discourse-graph** research wiki, entirely by AI, versioned in git.
   Its design is [`docs/design.md`](docs/design.md) / [`docs/process.md`](docs/process.md).
-  Runs sandboxed, one ephemeral agent per task, needing a GitHub token.
+  Each published post is ingested by a **fresh microVM**: the agent (universal
+  native tools, broad web egress) researches, commits and pushes to a
+  `researcher/<slug>` review branch — all in the box, every secret network-bound
+  (nothing real in the guest, nothing on the host). Wired at `src/research.clj`.
 - **PUBLISHER** — a new note in the Zulip stream `#blog` becomes an English post on an
   [11ty](https://11ty.dev) site **and** a Telegram repost; both links are replied back
   into the thread, then the thread is resolved. Runs as a trusted host machine. See
@@ -64,7 +67,8 @@ core), described in [`docs/provisioning.md`](docs/provisioning.md):
 | [`src/botfather.clj`](src/botfather.clj) | One-time owner bootstrap: `create` a fresh admin account or `adopt` one you made by hand. Stores `ZULIP_OWNER_*` in secretspec. |
 | [`src/publisher/`](src/publisher/) | The publisher machine: `translate` · `site` (11ty) · `telegram` · `zulip` (source) · `machine` (pipeline + overridable facades) · `config` · `main` (poll loop). |
 | [`src/shared/http.clj`](src/shared/http.clj) | Minimal JSON/form HTTP util (no dependency on `researcher.*`). |
-| [`src/researcher/`](src/researcher/) | The researcher machine (ingest, KB, recall, corpus, graph, …). |
+| [`src/research.clj`](src/research.clj) | The **live** researcher: ingest one published post in a fresh microVM (clone → agent → commit → push a review branch), all secrets network-bound. Wired into the publisher's `on-published`. |
+| [`src/researcher/`](src/researcher/) | The richer gateway/grant/KB researcher (ingest, KB, recall, corpus, graph) — its own `:run`/`:image` CLI, separate from the live `research.clj` path. |
 | [`secretspec.toml`](secretspec.toml) | Secret declarations: owner creds + per-machine accesses + the researcher's own keys. |
 
 ## Bootstrap and run
