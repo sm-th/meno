@@ -9,6 +9,7 @@
             [publisher.config :as pubcfg]
             [research :as research]
             [publisher.zulip :as zulip]
+            [zeno.loop :as zloop]
             [clojure.edn :as edn]
             [clojure.string :as str]
             [clojure.walk :as walk]))
@@ -84,27 +85,50 @@
               :channel   (merge (:telegram pcfg) {:token (get e "TELEGRAM_BOT_TOKEN")})}}))
 
 (defn setup!
-  "Provision identities once, build the publisher machine once, and register a Zulip
-   event queue. Return {:poll-ms :step}: `step` does one bounded long-poll of the
-   queue and, when a #blog message arrives (or on first registration), runs one
-   idempotent publish pass. The engine (zeno.loop) drives it; :poll-ms 0 re-enters
-   the step as soon as it returns, so the step's own long-poll paces the loop —
-   near-instant pickup instead of a fixed interval."
+  "Provision identities once and build the publisher machine once. Returns
+   {:source :run} — the built source port and a one-publish-pass fn."
   []
-  (let [inst   (load-instance)
-        ids    (provision! inst)
-        _      (println "provisioned:" (vec (keys ids)))
-        pubm   (pub/build (publisher-overrides inst ids))
-        src    (:source pubm)
-        run    (:run pubm)
-        qstate (atom nil)]
-    {:poll-ms (get inst :poll-ms 0)
-     :step (fn []
-             (when (:wake? ((:events! src) qstate))
-               (doseq [r (run)]
-                 (println "published:" (:topic r) "->" (:site-url r) "|" (:tg-url r)))))}))
+  (let [inst (load-instance)
+        ids  (provision! inst)]
+    (println "provisioned:" (vec (keys ids)))
+    (let [pubm (pub/build (publisher-overrides inst ids))]
+      {:source (:source pubm) :run (:run pubm)})))
+
+(defn start-publisher!
+  "Run the #blog publisher as an event-driven long-poll in a supervised daemon
+   thread: register a Zulip event queue, block on /events, and on each new message
+   run one idempotent publish pass. The blocking long-poll lives on its OWN thread
+   (never on zeno's single scheduler thread); a zeno.loop watchdog restarts it if it
+   ever dies. The listen loop catches everything, so it does not die on its own."
+  []
+  (let [{:keys [source run]} (setup!)
+        spawn (fn []
+                (doto (Thread.
+                       (fn []
+                         (let [qstate (atom nil)]
+                           (loop []
+                             (try
+                               (when (:wake? ((:events! source) qstate))
+                                 (doseq [r (run)]
+                                   (println "published:" (:topic r) "->" (:site-url r) "|" (:tg-url r))))
+                               (catch Throwable e
+                                 (println "!! publisher listener:" (or (.getMessage e) (str e)))
+                                 (Thread/sleep 2000)))
+                             (recur)))))
+                  (.setName "publisher-longpoll")
+                  (.setDaemon true)
+                  (.start)))
+        thread (atom (spawn))]
+    (zloop/every :publisher-watchdog 10000
+                 (fn []
+                   (when-not (.isAlive ^Thread @thread)
+                     (println "publisher listener died — restarting")
+                     (reset! thread (spawn)))))
+    (println "zeno: publisher listening on #blog (event-driven long-poll)")
+    nil))
 
 (defn -main
   "One-shot: provision + one publisher pass (for manual `clojure -M` runs)."
   [& _]
-  ((:step (setup!))))
+  (doseq [r ((:run (setup!)))]
+    (println "published:" (:topic r) "->" (:site-url r) "|" (:tg-url r))))

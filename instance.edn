@@ -10,10 +10,6 @@
          :owner-key-env  "ZULIP_OWNER_API_KEY"
          :host           "chat.gradienthike.com"}   ; egress host for a sandboxed agent's network-bound bot key
 
- ;; Publisher is event-driven (Zulip long-poll). 0 = re-enter the step as soon as it
- ;; returns, so the long-poll itself paces the loop (near-instant pickup).
- :poll-ms 0
-
  ;; Researcher: a sandboxed omp agent (fresh per-post microVM) that ingests each
  ;; published post into the wiki. EVERYTHING runs in the microVM — clone, the agent
  ;; (full native tools + broad web egress), commit and git push; the host only spawns
