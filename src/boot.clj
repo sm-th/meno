@@ -67,7 +67,8 @@
                               (future
                                 (let [r (research/ingest! rcfg published)]
                                   (when (zero? (:exit r))
-                                    (research/accept! rcfg r)))))}
+                                    (when-let [acc (research/accept! rcfg r)]
+                                      ((:reply! source) post (research/receipt acc)))))))}
      :config {:translate (:translate pcfg)
               :site      (:site pcfg)
               :source    (merge (:zulip pcfg)

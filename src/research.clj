@@ -149,8 +149,8 @@ Keep every page short and atomic — one idea per file.")
   "Auto-accept a finished ingest: open a PR for the pushed branch and squash-merge
    it (deleting the branch), so review is automatic and only the merged-PR list
    remains to glance at. Host-side deterministic policy using GH_TOKEN from the env
-   (the trusted orchestrator merges; the agent only pushed the branch). Best-effort;
-   logs, never throws."
+   (the trusted orchestrator merges; the agent only pushed the branch). On success
+   returns {:number :url :pages}; on any failure returns nil. Never throws."
   [{:keys [wiki-repo wiki-base]} {:keys [branch title]}]
   (try
     (let [token (System/getenv "GH_TOKEN")
@@ -163,17 +163,37 @@ Keep every page short and atomic — one idea per file.")
                      :head  branch
                      :base  (or wiki-base "main")
                      :body  (str "Automated research ingest for **" title "**. Auto-merged.")})
-          num   (get-in pr [:body :number])]
+          num   (get-in pr [:body :number])
+          url   (get-in pr [:body :html_url])]
       (if (nil? num)
-        (println "researcher: accept! — PR create failed (" (:status pr) "):"
-                 (pr-str (get-in pr [:body :message])))
-        (let [mg (gh token :put (str api "/pulls/" num "/merge")
-                     {:merge_method "squash"
-                      :commit_title (str "researcher: " title " (#" num ")")})]
+        (do (println "researcher: accept! — PR create failed (" (:status pr) "):"
+                     (pr-str (get-in pr [:body :message])))
+            nil)
+        (let [pages (->> (:body (gh token :get (str api "/pulls/" num "/files") nil))
+                         (keep :filename)
+                         (filter #(str/ends-with? % ".md"))
+                         vec)
+              mg    (gh token :put (str api "/pulls/" num "/merge")
+                        {:merge_method "squash"
+                         :commit_title (str "researcher: " title " (#" num ")")})]
           (if (get-in mg [:body :merged])
             (do (gh token :delete (str api "/git/refs/heads/" branch) nil)
-                (println "researcher: accepted — PR #" num "squash-merged, branch deleted"))
-            (println "researcher: accept! — merge failed for PR #" num "(" (:status mg) "):"
-                     (pr-str (get-in mg [:body :message])))))))
+                (println "researcher: accepted — PR #" num "squash-merged, branch deleted")
+                {:number num :url url :pages pages})
+            (do (println "researcher: accept! — merge failed for PR #" num "(" (:status mg) "):"
+                         (pr-str (get-in mg [:body :message])))
+                nil)))))
     (catch Throwable t
-      (println "researcher: accept! error —" (or (ex-message t) (str t))))))
+      (println "researcher: accept! error —" (or (ex-message t) (str t)))
+      nil)))
+
+(defn receipt
+  "A short Zulip thread receipt for a merged research PR: the PR link plus the
+   pages it added or updated."
+  [{:keys [number url pages]}]
+  (str "🔬 Researched — merged [PR #" number "](" url ")"
+       (when (seq pages)
+         (str "\n" (count pages) " page(s): "
+              (->> pages
+                   (map #(-> (str %) (str/replace #"^site/" "") (str/replace #"\.md$" "")))
+                   (str/join ", "))))))
