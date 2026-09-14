@@ -11,7 +11,7 @@ create bots** — so the account that provisions must be a regular **owner admin
 (a user). [`botfather`](../src/botfather.clj) bootstraps that account **once**:
 
 ```sh
-cd ~/.zeno && nix develop github:reflection-dev/zeno -c clojure -M -m botfather
+cd ~/.zeno && clojure -M -m botfather
 ```
 
 It offers two paths:

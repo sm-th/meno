@@ -8,7 +8,7 @@
    email + API key (a token); a password is used only transiently in `create` to
    mint that key via fetch_api_key.
 
-   Run:  nix develop github:reflection-dev/zeno -c clojure -M -m botfather"
+   Run:  clojure -M -m botfather (needs clojure + jdk + git + secretspec on PATH)"
   (:require [shared.http :as http]
             [clojure.java.shell :as sh]
             [clojure.string :as str])

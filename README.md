@@ -81,7 +81,7 @@ The owner admin account is the **one bootstrap secret**; the bots' keys live in 
    secretspec:
 
    ```sh
-   cd ~/.zeno && nix develop github:reflection-dev/zeno -c clojure -M -m botfather
+   cd ~/.zeno && clojure -M -m botfather
    ```
 
    `create` mints a fresh admin via the API (self-hosted, or a realm where your account
@@ -108,9 +108,10 @@ The owner admin account is the **one bootstrap secret**; the bots' keys live in 
 Config lives on local disk, so config changes need no push — just re-run. Only
 zeno-core changes need a push to `reflection-dev/zeno`. This instance is a **pure
 config** — no flake of its own: the launcher (`nix run …#zeno`) provides the runtime and
-loads secrets, and `nix develop github:reflection-dev/zeno` provides the toolchain
-(clojure + jdk + git + secretspec) for `botfather` and a machine's own CLI (e.g. the
-researcher's `clojure -M:image`).
+loads secrets. Its own CLIs (`botfather`, a machine's `clojure -M:image`) are plain
+Clojure — they need `clojure` + a JDK + `git` + `secretspec` on your PATH (standard
+tools; `nix shell nixpkgs#clojure nixpkgs#jdk nixpkgs#git nixpkgs#secretspec` for an
+ad-hoc shell). zeno is not involved in running them.
 
 ## Docs
 
