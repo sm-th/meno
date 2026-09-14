@@ -14,25 +14,23 @@
  :poll-ms 60000
 
  ;; Researcher: a sandboxed omp agent (fresh per-post microVM) that ingests each
- ;; published post into the wiki. ALL LLM traffic routes through the Manifest
- ;; gateway; the Manifest key (ANTHROPIC_API_KEY) is delivered network-bound and web
- ;; egress is broad (read sources). The sandbox holds NO git creds — the agent only
- ;; commits; the trusted host pushes the result to a review branch.
+ ;; published post into the wiki. EVERYTHING runs in the microVM — clone, the agent
+ ;; (full native tools + broad web egress), commit and git push; the host only spawns
+ ;; it. Every secret is network-bound (msb injects the real value only toward its
+ ;; host, even inside git's base64 Basic-auth), so the guest holds only placeholders.
  :research {:wiki-repo    "https://github.com/agent-smith-wiki/smith-wiki.git"
             :wiki-base    "main"
             :image        "zeno-agent:base"
             :manifest-url "https://llm.gradienthike.com/v1"
             :model        "opencode-go/deepseek-v4-flash"
             :git-name     "Agent Smith"
-            :git-email    "agent@smith.wiki"
-            :push-token-env     "GH_TOKEN"    ; host pushes with this (plain token, host only)
-            :push-branch-prefix "researcher/"}
+            :git-email    "agent@smith.wiki"}
 
  ;; Machines. :identity -> a provisioned Zulip bot (chat persona + stream subs).
  ;; :accesses -> catalog keys; :sandboxed -> host env vs network-bound delivery.
  :machines
  {:researcher {:identity  {:chat "Meno Researcher" :streams ["blog" "research"]}
-               :accesses  [:llm]           ; only the Manifest key in the sandbox; git creds stay on the host
+               :accesses  [:github :llm]    ; Manifest key + GH_TOKEN, both network-bound in the VM
                :sandboxed true}
   :publisher  {:identity  {:chat "Blog Publisher" :streams ["blog"]}
                :accesses  [:telegram]      ; host: git push via ssh key, not a delivered token

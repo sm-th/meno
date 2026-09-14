@@ -54,8 +54,8 @@ DO THIS with the one source post you are given:
 5. MAP IT: add each new page to the single most relevant moc page (grep '^type: moc'
    site/*.md) under a fitting bold heading, so nothing is orphaned. Don't create a new
    MoC lightly.
-6. COMMIT: when nothing is left to file, git add -A && commit with a clear message,
-   then stop. Do NOT push and do NOT touch git remotes — pushing is handled for you.
+6. COMMIT & PUSH: when nothing is left to file, git add -A && commit with a clear
+   message, then run the exact `git push` command your task gives you. Then stop.
 
 Keep every page short and atomic — one idea per file.")
 
@@ -63,89 +63,70 @@ Keep every page short and atomic — one idea per file.")
   (-> (str s) str/lower-case (str/replace #"[^a-z0-9]+" "-") (str/replace #"^-+|-+$" "")))
 
 (defn ingest!
-  "Run one published post {:title :body :site-url} through a sandboxed omp worker.
-   LLM routes ONLY through the Manifest gateway (custom openai-completions provider
-   written at guest start from the network-bound ANTHROPIC_API_KEY placeholder).
-   The sandboxed agent holds NO git credentials — it only commits into the mounted
-   clone; the trusted host then pushes the new commit to a review branch using
-   :push-token-env (a plain token is fine on the host, never in the sandbox).
-   Retries the whole run on non-zero exit (a transient upstream stream drop kills
-   the omp session); the researcher is idempotent. cfg:
+  "Run one published post {:title :body :site-url} — EVERYTHING happens inside one
+   ephemeral microVM; the host only does `msb run`. The VM clones the wiki, the
+   agent (omp, full native tools, broad web egress) researches, edits, commits and
+   pushes to a review branch. Every secret is network-bound: msb injects the real
+   value only toward its host — even inside git's base64 Basic-auth — so the guest
+   only ever holds placeholders and a prompt-injection has nothing to exfiltrate.
+   Secrets: ANTHROPIC_API_KEY@manifest (LLM) and GH_TOKEN@github (clone + push).
+   Retries the whole run on a transient upstream stream drop. cfg:
    {:wiki-repo :wiki-base :image :manifest-url :model :git-name :git-email
-    :net-bound :secret-env :egress :retries :push-token-env :push-branch-prefix}."
+    :net-bound :secret-env :egress :retries}."
   [{:keys [wiki-repo wiki-base image manifest-url model git-name git-email
-           net-bound secret-env egress retries push-token-env push-branch-prefix]}
+           net-bound secret-env egress retries]}
    {:keys [title body site-url]}]
   (let [max-att (inc (or retries 2))
-        env     {"OMP_TASK"     (str "SOURCE POST (" site-url "):\n\n# " title "\n\n" body)
+        branch  (str "researcher/" (slug title))
+        env     {"OMP_TASK"     (str "SOURCE POST (" site-url "):\n\n# " title "\n\n" body
+                                     "\n\n---\nWhen finished: git add -A, commit with a clear"
+                                     " message, then `git push origin HEAD:refs/heads/" branch "`.")
                  "OMP_SYS"      system-prompt
                  "MANIFEST_URL" (or manifest-url "https://llm.gradienthike.com/v1")
                  "MODEL_ID"     (or model "opencode-go/deepseek-v4-flash")
+                 "WIKI_REPO"    wiki-repo
+                 "WIKI_BASE"    (or wiki-base "main")
+                 "GIT_SSL_CAINFO"      "/.msb/tls/ca.pem"
                  "GIT_AUTHOR_NAME"     (or git-name "Agent Smith")
                  "GIT_AUTHOR_EMAIL"    (or git-email "agent@smith.wiki")
                  "GIT_COMMITTER_NAME"  (or git-name "Agent Smith")
                  "GIT_COMMITTER_EMAIL" (or git-email "agent@smith.wiki")}
         argv    ["/bin/sh" "-c"
-                 (str "mkdir -p /root/.omp/agent && "
+                 (str "set -e; mkdir -p /root/.omp/agent; "
                       "printf 'providers:\\n  manifest:\\n    baseUrl: %s\\n"
                       "    api: openai-completions\\n    apiKey: \"%s\"\\n"
                       "    models:\\n      - id: %s\\n' "
                       "\"$MANIFEST_URL\" \"$ANTHROPIC_API_KEY\" \"$MODEL_ID\" "
-                      "> /root/.omp/agent/models.yml && "
-                      "cd /repos/wiki && printf %s \"$OMP_TASK\" | "
-                      "omp -p --approval-mode yolo "
+                      "> /root/.omp/agent/models.yml; "
+                      "git clone --depth 1 --branch \"$WIKI_BASE\" "
+                      "\"https://x-access-token:${GH_TOKEN}@${WIKI_REPO#https://}\" /repos/wiki; "
+                      "cd /repos/wiki; "
+                      "git config user.name \"$GIT_AUTHOR_NAME\"; "
+                      "git config user.email \"$GIT_AUTHOR_EMAIL\"; "
+                      "printf %s \"$OMP_TASK\" | omp -p --approval-mode yolo "
                       "--model \"manifest/$MODEL_ID\" --system-prompt \"$OMP_SYS\"")]
-        head    (fn [work] (str/trim (str (:out (sh/sh "git" "-C" work "rev-parse" "HEAD")))))
-        push!   (fn [work]
-                  (let [tok (System/getenv (or push-token-env "GH_TOKEN"))
-                        url (if (and tok (str/starts-with? (str wiki-repo) "https://"))
-                              (str/replace-first wiki-repo "https://"
-                                                 (str "https://x-access-token:" tok "@"))
-                              wiki-repo)
-                        br  (str (or push-branch-prefix "researcher/") (slug title))
-                        r   (sh/sh "git" "-C" work "push" url (str "HEAD:refs/heads/" br))]
-                    (if (zero? (:exit r))
-                      (do (println "researcher: pushed to" br) true)
-                      (do (println "researcher: host push failed —" (str/trim (str (:err r))))
-                          false))))
         run-once
         (fn []
-          (let [tmp   (.getCanonicalPath (java.io.File. (or (System/getenv "TMPDIR") "/tmp")))
-                work  (str tmp "/meno-wiki-" (System/currentTimeMillis))
-                clone (sh/sh "git" "clone" "--depth" "1" "--branch" (or wiki-base "main")
-                             wiki-repo work)]
-            (if-not (zero? (:exit clone))
-              {:exit 1 :err (str "wiki clone failed: " (str/trim (str (:err clone))))}
-              (try
-                (let [before (head work)
-                      {:keys [exit] :as r}
-                      (sandbox/run {:image      (or image "zeno-agent:base")
-                                    :workdir    "/repos/wiki"
-                                    :mounts     [{:src work :dst "/repos/wiki"}]
-                                    :env        env
-                                    :net-bound  net-bound
-                                    :secret-env secret-env
-                                    :egress     (or egress {:net "public"})
-                                    :timeout    "20m"
-                                    :argv       argv})]
-                  (cond
-                    (not (zero? exit))     r
-                    (= before (head work)) (do (println "researcher: no commit from agent —"
-                                                        (pr-str title)) r)
-                    (push! work)           r
-                    :else                  (assoc r :exit 1 :err "host push failed")))
-                (finally (sh/sh "rm" "-rf" work))))))]
+          (sandbox/run {:image      (or image "zeno-agent:base")
+                        :env        env
+                        :net-bound  net-bound
+                        :secret-env secret-env
+                        :egress     (or egress {:net "public"})
+                        :timeout    "20m"
+                        :argv       argv}))]
     (try
       (loop [attempt 1]
         (println "researcher: ingesting" (pr-str title) "in sandbox — attempt"
                  attempt "/" max-att)
-        (let [{:keys [exit err] :as r} (run-once)]
+        (let [{:keys [exit err]} (run-once)]
           (cond
-            (zero? exit)        (do (println "researcher: done —" (pr-str title)) r)
+            (zero? exit)        (do (println "researcher: done —" (pr-str title) "→" branch)
+                                    {:exit 0 :branch branch})
             (< attempt max-att) (do (println "researcher: attempt" attempt "failed (exit"
                                              exit "):" (str/trim (str err)) "— retrying")
                                     (recur (inc attempt)))
             :else               (do (println "researcher: gave up after" max-att
-                                             "attempts —" (str/trim (str err))) r))))
+                                             "attempts —" (str/trim (str err)))
+                                    {:exit exit}))))
       (catch Throwable t
         (println "researcher: error —" (or (ex-message t) (str t)))))))
