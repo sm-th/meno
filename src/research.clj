@@ -230,7 +230,7 @@ Keep every page short and atomic — one idea per file.")
                      (str/join ", "))
           entry (str "## " (java.time.LocalDate/now) " — " title "\n\n"
                      "[PR #" number "](" url ") · " (count pages) " page(s): " links "\n\n")
-          intro (str "---\ntitle: Changelog\n---\n\n# Changelog\n\n"
+          intro (str "---\ntitle: Changelog\n---\n\n"
                      "Auto-maintained by the orchestrator: one entry per merged research ingest, newest first.\n\n")
           marker "newest first.\n\n"
           enc   (fn [s] (.encodeToString (java.util.Base64/getEncoder) (.getBytes (str s) "UTF-8")))
