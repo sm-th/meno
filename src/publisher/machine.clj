@@ -23,8 +23,11 @@
     (some? b) b
     :else a))
 
-(defn- spoiler [title body]
-  (str "```spoiler " (or title "post") "\n" body "\n```"))
+(defn- spoiler
+  "A Zulip spoiler whose collapsed header is a link to the post at `url`; the title
+   heading and the body live inside it."
+  [url title body]
+  (str "```spoiler " url "\n## " (or title "post") "\n\n" body "\n```"))
 
 (defn- site-host [config]
   (-> (get-in config [:site :site-url] "")
@@ -41,12 +44,12 @@
         find-link (or (:find-link source) (constantly nil))
         site-url  (or (find-link post (site-host config))
                       (let [{u :url} (site (:site config) en (:at post))]
-                        ((:reply! source) post (str u "\n\n" (spoiler title body)))
+                        ((:reply! source) post (spoiler u title body))
                         u))
         tg-url    (or (find-link post "t.me")
                       (let [{u :url} (channel (:channel config)
                                              {:title title :body body :site-url site-url})]
-                        ((:reply! source) post (str u "\n\n" (spoiler title body)))
+                        ((:reply! source) post (spoiler u title body))
                         u))
         published {:title title :body body :site-url site-url :tg-url tg-url
                    :post-id (:id post) :topic (:topic post)}]
