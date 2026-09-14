@@ -200,3 +200,59 @@ Keep every page short and atomic — one idea per file.")
                      (map #(let [slug (-> (str %) (str/replace #"^site/" "") (str/replace #"\.md$" ""))]
                              (str "[" slug "](" base "/" slug "/)")))
                      (str/join ", ")))))))
+
+(defn- gh-content
+  "GET a repo file on `ref` as {:sha :content(decoded)}, or nil if the file is absent."
+  [token repo path ref]
+  (let [r   (gh token :get (str "https://api.github.com/repos/" repo "/contents/" path "?ref=" ref) nil)
+        b64 (get-in r [:body :content])]
+    (when b64
+      {:sha     (get-in r [:body :sha])
+       :content (String. (.decode (java.util.Base64/getDecoder) (str/replace (str b64) "\n" "")) "UTF-8")})))
+
+(defn changelog!
+  "Append (newest first) an entry for a merged research ingest to site/changelog.md
+   on the wiki's main branch — committed by the orchestrator, NOT the agent. The page
+   is code-maintained yet readable by agents (it ships in the cloned site/) and
+   published at <wiki-site>/changelog/. Best-effort; retries on a concurrent-update
+   conflict, never throws."
+  [{:keys [wiki-repo wiki-base wiki-site git-name git-email]}
+   {:keys [title number url pages site]}]
+  (try
+    (let [token (System/getenv "GH_TOKEN")
+          repo  (-> (str wiki-repo) (str/replace #"^https?://github\.com/" "") (str/replace #"\.git$" ""))
+          base  (or wiki-base "main")
+          site* (or site wiki-site "https://smith.wiki")
+          path  "site/changelog.md"
+          links (->> pages
+                     (map #(let [s (-> (str %) (str/replace #"^site/" "") (str/replace #"\.md$" ""))]
+                             (str "[" s "](" site* "/" s "/)")))
+                     (str/join ", "))
+          entry (str "## " (java.time.LocalDate/now) " — " title "\n\n"
+                     "[PR #" number "](" url ") · " (count pages) " page(s): " links "\n\n")
+          intro (str "---\ntitle: Changelog\n---\n\n# Changelog\n\n"
+                     "Auto-maintained by the orchestrator: one entry per merged research ingest, newest first.\n\n")
+          marker "newest first.\n\n"
+          enc   (fn [s] (.encodeToString (java.util.Base64/getEncoder) (.getBytes (str s) "UTF-8")))
+          once  (fn []
+                  (let [{:keys [content sha]} (gh-content token repo path base)
+                        body (if (nil? content)
+                               (str intro entry)
+                               (if-let [i (str/index-of content marker)]
+                                 (str (subs content 0 (+ i (count marker))) entry (subs content (+ i (count marker))))
+                                 (str content entry)))
+                        r    (gh token :put (str "https://api.github.com/repos/" repo "/contents/" path)
+                                 (cond-> {:message   (str "changelog: research #" number " — " title)
+                                          :content   (enc body)
+                                          :branch    base
+                                          :committer {:name  (or git-name "Agent Smith")
+                                                      :email (or git-email "agent@smith.wiki")}}
+                                   sha (assoc :sha sha)))]
+                    (get-in r [:body :commit :sha])))]
+      (loop [n 4]
+        (cond
+          (once)   (println "researcher: changelog updated for #" number)
+          (pos? n) (do (Thread/sleep 400) (recur (dec n)))
+          :else    (println "researcher: changelog — gave up (conflicts) for #" number))))
+    (catch Throwable t
+      (println "researcher: changelog! error —" (or (ex-message t) (str t))))))
