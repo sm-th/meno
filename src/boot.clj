@@ -64,7 +64,7 @@
         rcfg (researcher-cfg inst)]
     {:ports  {:on-published (fn [source _config post published]
                               ((:mark-published! source) post)
-                              (research/ingest! rcfg published))}
+                              (future (research/ingest! rcfg published)))}
      :config {:translate (:translate pcfg)
               :site      (:site pcfg)
               :source    (merge (:zulip pcfg)
