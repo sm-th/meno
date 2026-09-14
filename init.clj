@@ -11,5 +11,5 @@
       (println "zeno: publisher scheduled every" poll-ms "ms"
                "— new #blog posts publish, then go to the researcher"))
     (println (str "zeno: instance loaded but NOT started (owner creds absent).\n"
-                  "  bootstrap:  cd " home " && nix develop -c clojure -M -m botfather\n"
-                  "  then run:   cd " home " && secretspec run -- nix run github:reflection-dev/zeno"))))
+                  "  bootstrap:  cd " home " && nix develop github:reflection-dev/zeno -c clojure -M -m botfather\n"
+                  "  then run:   nix run github:reflection-dev/zeno"))))

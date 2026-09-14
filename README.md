@@ -81,7 +81,7 @@ The owner admin account is the **one bootstrap secret**; the bots' keys live in 
    secretspec:
 
    ```sh
-   cd ~/.zeno && nix develop -c clojure -M -m botfather
+   cd ~/.zeno && nix develop github:reflection-dev/zeno -c clojure -M -m botfather
    ```
 
    `create` mints a fresh admin via the API (self-hosted, or a realm where your account
@@ -95,18 +95,22 @@ The owner admin account is the **one bootstrap secret**; the bots' keys live in 
    secretspec set ZULIP_SITE https://your-realm.zulipchat.com
    ```
 
-3. **Run.** With `ZULIP_OWNER_API_KEY` in the environment, `init.clj` runs
-   `boot/-main` — it reconciles every machine's Zulip bot, delivers accesses, and runs
-   the publisher pipeline:
+3. **Run.** The launcher loads this instance's secretspec profile into the env (so
+   `ZULIP_OWNER_API_KEY` is present), then `init.clj` runs `boot/-main` — it reconciles
+   every machine's Zulip bot, delivers accesses, and runs the publisher pipeline:
 
    ```sh
-   cd ~/.zeno && secretspec run -- nix run github:reflection-dev/zeno
+   nix run github:reflection-dev/zeno
    ```
 
+   Secrets load automatically; opt out with `nix run github:reflection-dev/zeno -- --no-secretspec`.
+
 Config lives on local disk, so config changes need no push — just re-run. Only
-zeno-core changes need a push to `reflection-dev/zeno`. `nix develop` here provides the
-toolchain (clojure + jdk + git + secretspec) used for `botfather` and for running a
-machine's own CLI (e.g. the researcher's `clojure -M:image`).
+zeno-core changes need a push to `reflection-dev/zeno`. This instance is a **pure
+config** — no flake of its own: the launcher (`nix run …#zeno`) provides the runtime and
+loads secrets, and `nix develop github:reflection-dev/zeno` provides the toolchain
+(clojure + jdk + git + secretspec) for `botfather` and a machine's own CLI (e.g. the
+researcher's `clojure -M:image`).
 
 ## Docs
 
