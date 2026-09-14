@@ -13,19 +13,5 @@
           packages = [ pkgs.clojure pkgs.jdk pkgs.git pkgs.secretspec ];
         };
       });
-
-      # `nix run ~/.zeno` — bundles secretspec (no PATH install needed), loads this
-      # instance's secrets, then launches the live zeno runtime against ~/.zeno.
-      # Owner creds (ZULIP_OWNER_*) must be declared in secretspec.toml to provision.
-      apps = forAll (pkgs: {
-        default = {
-          type = "app";
-          program = toString (pkgs.writeShellScript "meno" ''
-            cd ${self}
-            exec ${pkgs.secretspec}/bin/secretspec run --reason meno -- \
-              nix run github:reflection-dev/zeno -- "$@"
-          '');
-        };
-      });
     };
 }
