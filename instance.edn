@@ -21,6 +21,7 @@
  ;; host, even inside git's base64 Basic-auth), so the guest holds only placeholders.
  :research {:wiki-repo    "https://github.com/agent-smith-wiki/smith-wiki.git"
             :wiki-base    "main"
+            :wiki-site    "https://smith.wiki"   ; published base for receipt page links
             :image        "zeno-agent:base"
             :manifest-url "https://llm.gradienthike.com/v1"
             :model        "opencode-go/deepseek-v4-flash"

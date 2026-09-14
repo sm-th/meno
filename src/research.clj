@@ -152,7 +152,7 @@ Keep every page short and atomic — one idea per file.")
    remains to glance at. Host-side deterministic policy using GH_TOKEN from the env
    (the trusted orchestrator merges; the agent only pushed the branch). On success
    returns {:number :url :pages}; on any failure returns nil. Never throws."
-  [{:keys [wiki-repo wiki-base]} {:keys [branch title]}]
+  [{:keys [wiki-repo wiki-base wiki-site]} {:keys [branch title]}]
   (try
     (let [token (System/getenv "GH_TOKEN")
           repo  (-> (str wiki-repo)
@@ -180,7 +180,7 @@ Keep every page short and atomic — one idea per file.")
           (if (get-in mg [:body :merged])
             (do (gh token :delete (str api "/git/refs/heads/" branch) nil)
                 (println "researcher: accepted — PR #" num "squash-merged, branch deleted")
-                {:number num :url url :pages pages})
+                {:number num :url url :pages pages :site (or wiki-site "https://smith.wiki")})
             (do (println "researcher: accept! — merge failed for PR #" num "(" (:status mg) "):"
                          (pr-str (get-in mg [:body :message])))
                 nil)))))
@@ -189,12 +189,14 @@ Keep every page short and atomic — one idea per file.")
       nil)))
 
 (defn receipt
-  "A short Zulip thread receipt for a merged research PR: the PR link plus the
-   pages it added or updated."
-  [{:keys [number url pages]}]
-  (str "🔬 Researched — merged [PR #" number "](" url ")"
-       (when (seq pages)
-         (str "\n" (count pages) " page(s): "
-              (->> pages
-                   (map #(-> (str %) (str/replace #"^site/" "") (str/replace #"\.md$" "")))
-                   (str/join ", "))))))
+  "A short Zulip thread receipt for a merged research PR: the PR link plus links to
+   the wiki pages it added or updated."
+  [{:keys [number url pages site]}]
+  (let [base (or site "https://smith.wiki")]
+    (str "🔬 Researched — merged [PR #" number "](" url ")"
+         (when (seq pages)
+           (str "\n" (count pages) " page(s): "
+                (->> pages
+                     (map #(let [slug (-> (str %) (str/replace #"^site/" "") (str/replace #"\.md$" ""))]
+                             (str "[" slug "](" base "/" slug "/)")))
+                     (str/join ", ")))))))

@@ -8,6 +8,7 @@
             [publisher.machine :as pub]
             [publisher.config :as pubcfg]
             [research :as research]
+            [publisher.zulip :as zulip]
             [clojure.edn :as edn]
             [clojure.string :as str]
             [clojure.walk :as walk]))
@@ -61,14 +62,18 @@
                             :zulip-host (:host z)})
         e    (deliver/env-map plan)
         pcfg (pubcfg/load-config)
-        rcfg (researcher-cfg inst)]
+        rcfg  (researcher-cfg inst)
+        r-src (zulip/adapter {:site    (env (:site-env z))
+                              :email   (get-in ids [:researcher :email])
+                              :api-key (get-in ids [:researcher :api-key])
+                              :stream  "blog"})]
     {:ports  {:on-published (fn [source _config post published]
                               ((:mark-published! source) post)
                               (future
                                 (let [r (research/ingest! rcfg published)]
                                   (when (zero? (:exit r))
                                     (when-let [acc (research/accept! rcfg r)]
-                                      ((:reply! source) post (research/receipt acc)))))))}
+                                      ((:reply! r-src) post (research/receipt acc)))))))}
      :config {:translate (:translate pcfg)
               :site      (:site pcfg)
               :source    (merge (:zulip pcfg)
