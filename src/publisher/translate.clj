@@ -54,10 +54,15 @@ Hard rules:
 - Never write a word about the post itself, its length, format, or this task.")
 
 (def ^:private output-format
-  "Output ONLY the following, nothing before or after, and no code fences around it:
+  "The input is the author's note, preceded by a `TITLE:` line holding the author's
+own title for it. Translate BOTH: the TITLE into the title field (same meaning, the
+author's voice, never invented, never left in the source language), and the note
+into the body.
+
+Output ONLY the following, nothing before or after, and no code fences around it:
 
 ---
-title: <a short, plain post title in the author's voice>
+title: <the author's title, in English>
 description: <one plain sentence describing the post, no trailing period>
 ---
 <the translated body>")
@@ -86,7 +91,7 @@ description: <one plain sentence describing the post, no trailing period>
      :api-key   bearer key   (default env ANTHROPIC_API_KEY)
    Talks to an Anthropic-compatible gateway (Manifest) with a Bearer token."
   [{:keys [model base-url api-key max-tokens]
-    :or   {model "claude-opus-4-8" max-tokens 4096}} note]
+    :or   {model "claude-opus-4-8" max-tokens 4096}} note src-title]
   (let [base (or base-url (env "ANTHROPIC_BASE_URL"))
         key  (or api-key (env "ANTHROPIC_API_KEY"))]
     (when-not (and base key)
@@ -99,7 +104,8 @@ description: <one plain sentence describing the post, no trailing period>
                          :json    {:model      model
                                    :max_tokens max-tokens
                                    :system     system-prompt
-                                   :messages   [{:role "user" :content note}]}
+                                   :messages   [{:role "user"
+                                                 :content (str "TITLE: " src-title "\n\nNOTE:\n" note)}]}
                          :timeout 180})]
       (when-not (= 200 status)
         (throw (ex-info "translate: gateway error" {:status status :body body})))

@@ -6,7 +6,8 @@
    and any page it fetches are untrusted input. Best-effort; never throws."
   (:require [clojure.java.shell :as sh]
             [clojure.string :as str]
-            [zeno.sandbox :as sandbox]))
+            [zeno.sandbox :as sandbox]
+            [shared.http :as http]))
 
 (def system-prompt
   "You are meno's researcher. You grow a public Zettelkasten-style discourse-graph
@@ -83,6 +84,7 @@ Keep every page short and atomic — one idea per file.")
                                      " message, then `git push origin HEAD:refs/heads/" branch "`.")
                  "OMP_SYS"      system-prompt
                  "MANIFEST_URL" (or manifest-url "https://llm.gradienthike.com/v1")
+                 "ANTHROPIC_BASE_URL" (str/replace (or manifest-url "https://llm.gradienthike.com/v1") #"/v1/?$" "")
                  "MODEL_ID"     (or model "opencode-go/deepseek-v4-flash")
                  "WIKI_REPO"    wiki-repo
                  "WIKI_BASE"    (or wiki-base "main")
@@ -121,7 +123,7 @@ Keep every page short and atomic — one idea per file.")
         (let [{:keys [exit err]} (run-once)]
           (cond
             (zero? exit)        (do (println "researcher: done —" (pr-str title) "→" branch)
-                                    {:exit 0 :branch branch})
+                                    {:exit 0 :branch branch :title title})
             (< attempt max-att) (do (println "researcher: attempt" attempt "failed (exit"
                                              exit "):" (str/trim (str err)) "— retrying")
                                     (recur (inc attempt)))
@@ -130,3 +132,48 @@ Keep every page short and atomic — one idea per file.")
                                     {:exit exit}))))
       (catch Throwable t
         (println "researcher: error —" (or (ex-message t) (str t)))))))
+
+(defn- gh
+  "One GitHub REST call with the bot token. Returns {:status :body}."
+  [token method url json]
+  (http/request {:method  method
+                 :url     url
+                 :headers {"Authorization"        (str "Bearer " token)
+                           "Accept"               "application/vnd.github+json"
+                           "X-GitHub-Api-Version" "2022-11-28"
+                           "User-Agent"           "meno-researcher"}
+                 :json    json
+                 :timeout 60}))
+
+(defn accept!
+  "Auto-accept a finished ingest: open a PR for the pushed branch and squash-merge
+   it (deleting the branch), so review is automatic and only the merged-PR list
+   remains to glance at. Host-side deterministic policy using GH_TOKEN from the env
+   (the trusted orchestrator merges; the agent only pushed the branch). Best-effort;
+   logs, never throws."
+  [{:keys [wiki-repo wiki-base]} {:keys [branch title]}]
+  (try
+    (let [token (System/getenv "GH_TOKEN")
+          repo  (-> (str wiki-repo)
+                    (str/replace #"^https?://github\.com/" "")
+                    (str/replace #"\.git$" ""))
+          api   (str "https://api.github.com/repos/" repo)
+          pr    (gh token :post (str api "/pulls")
+                    {:title (str "researcher: " title)
+                     :head  branch
+                     :base  (or wiki-base "main")
+                     :body  (str "Automated research ingest for **" title "**. Auto-merged.")})
+          num   (get-in pr [:body :number])]
+      (if (nil? num)
+        (println "researcher: accept! — PR create failed (" (:status pr) "):"
+                 (pr-str (get-in pr [:body :message])))
+        (let [mg (gh token :put (str api "/pulls/" num "/merge")
+                     {:merge_method "squash"
+                      :commit_title (str "researcher: " title " (#" num ")")})]
+          (if (get-in mg [:body :merged])
+            (do (gh token :delete (str api "/git/refs/heads/" branch) nil)
+                (println "researcher: accepted — PR #" num "squash-merged, branch deleted"))
+            (println "researcher: accept! — merge failed for PR #" num "(" (:status mg) "):"
+                     (pr-str (get-in mg [:body :message])))))))
+    (catch Throwable t
+      (println "researcher: accept! error —" (or (ex-message t) (str t))))))

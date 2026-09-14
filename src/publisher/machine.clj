@@ -37,7 +37,7 @@
    posts the receipt: translate -> [site + reply] -> [telegram + reply] ->
    on-published (react + researcher)."
   [{:keys [translate site channel on-published]} config source post]
-  (let [{:keys [title body] :as en} (translate (:translate config) (:content post))
+  (let [{:keys [title body] :as en} (translate (:translate config) (:content post) (:topic post))
         find-link (or (:find-link source) (constantly nil))
         site-url  (or (find-link post (site-host config))
                       (let [{u :url} (site (:site config) en (:at post))]
@@ -46,7 +46,7 @@
         tg-url    (or (find-link post "t.me")
                       (let [{u :url} (channel (:channel config)
                                              {:title title :body body :site-url site-url})]
-                        ((:reply! source) post (str u "\n\n" body))
+                        ((:reply! source) post (str u "\n\n" (spoiler title body)))
                         u))
         published {:title title :body body :site-url site-url :tg-url tg-url
                    :post-id (:id post) :topic (:topic post)}]
