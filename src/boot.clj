@@ -78,16 +78,24 @@
               :channel   (merge (:telegram pcfg) {:token (get e "TELEGRAM_BOT_TOKEN")})}}))
 
 (defn setup!
-  "Provision identities once; return {:poll-ms :step}. `step` runs one publisher
-   poll pass. The engine (zeno.loop) schedules it — the instance never loops."
+  "Provision identities once, build the publisher machine once, and register a Zulip
+   event queue. Return {:poll-ms :step}: `step` does one bounded long-poll of the
+   queue and, when a #blog message arrives (or on first registration), runs one
+   idempotent publish pass. The engine (zeno.loop) drives it; :poll-ms 0 re-enters
+   the step as soon as it returns, so the step's own long-poll paces the loop —
+   near-instant pickup instead of a fixed interval."
   []
-  (let [inst (load-instance)
-        ids  (provision! inst)]
-    (println "provisioned:" (vec (keys ids)))
-    {:poll-ms (get inst :poll-ms 60000)
+  (let [inst   (load-instance)
+        ids    (provision! inst)
+        _      (println "provisioned:" (vec (keys ids)))
+        pubm   (pub/build (publisher-overrides inst ids))
+        src    (:source pubm)
+        run    (:run pubm)
+        qstate (atom nil)]
+    {:poll-ms (get inst :poll-ms 0)
      :step (fn []
-             (let [pubm (pub/build (publisher-overrides inst ids))]
-               (doseq [r ((:run pubm))]
+             (when (:wake? ((:events! src) qstate))
+               (doseq [r (run)]
                  (println "published:" (:topic r) "->" (:site-url r) "|" (:tg-url r)))))}))
 
 (defn -main

@@ -69,6 +69,27 @@
     (:messages (GET cfg "/messages" {:anchor "oldest" :num_before 0 :num_after 200
                                      :apply_markdown false :narrow narrow}))))
 
+(defn register-queue!
+  "Register a Zulip event queue for message events in `stream`. Returns the body
+   {:queue_id :last_event_id ...}."
+  [cfg stream]
+  (send-form cfg :post "/register"
+             {:event_types    (json/write-str ["message"])
+              :narrow         (json/write-str [["stream" stream]])
+              :apply_markdown "false"}))
+
+(defn poll-events
+  "Long-poll a registered queue. Blocks server-side until an event or a heartbeat,
+   bounded by `timeout` s. Returns the parsed body: {:events [...]} on success, or
+   {:result \"error\" :code \"BAD_EVENT_QUEUE_ID\"} if the queue expired."
+  [{:keys [site email api-key]} queue-id last-event-id timeout]
+  (:body (http/request {:method  :get
+                        :url     (url site (str "/events"
+                                                (qs {:queue_id      queue-id
+                                                     :last_event_id last-event-id})))
+                        :headers {"Authorization" (basic email api-key)}
+                        :timeout timeout})))
+
 (defn adapter
   "Build the :source port from cfg {:site :email :api-key :stream :skip
    :published-emoji}."
@@ -110,4 +131,27 @@
      :mark-published!
      (fn [post]
        (send-form cfg :post (str "/messages/" (:id post) "/reactions")
-                  {:emoji_name emoji}))}))
+                  {:emoji_name emoji}))
+
+     :events!
+     ;; One bounded long-poll of the event queue, held in `state` (an atom). Returns
+     ;; {:wake? bool} — true when new posts may exist: a #blog message arrived, or the
+     ;; queue was just (re)registered (scan the backlog once). Re-registers on expiry.
+     (fn [state]
+       (try
+         (if (nil? @state)
+           (let [{:keys [queue_id last_event_id]} (register-queue! cfg stream)]
+             (reset! state {:queue queue_id :last last_event_id})
+             {:wake? true})
+           (let [{:keys [queue last]} @state
+                 body (poll-events cfg queue last 90)]
+             (if (= "error" (:result body))
+               (do (reset! state nil) {:wake? true})
+               (let [evs (:events body)]
+                 (when (seq evs)
+                   (swap! state assoc :last (reduce max last (map :id evs))))
+                 {:wake? (boolean (some #(= "message" (:type %)) evs))}))))
+         (catch Throwable t
+           (println "!! zulip events:" (.getMessage t))
+           (Thread/sleep 2000)
+           {:wake? false})))}))
