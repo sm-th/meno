@@ -1,7 +1,7 @@
 (ns public-research
   "One durable Agent Smith research conversation per Zulip topic. Human messages
-   from #research are translated, queued to Threads, researched in two
-   wiki-publishing passes, answered in Zulip, and queued as cross-account replies."
+   from #research are translated, queued to Threads, researched in one
+   wiki-publishing pass, answered in Zulip, and queued as cross-account replies."
   (:require [clojure.data.json :as json]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
@@ -61,9 +61,10 @@ checkout untouched and only reconstruct the requested result.json.")
 
 (defn translate!
   "Faithfully translate one message to English. No tools, no saved OMP session."
-  [cfg text]
+  [cfg topic content]
   (image/ensure!)
-  (let [{:keys [net-bound secret-env]} (only-secret cfg "ANTHROPIC_API_KEY")
+  (let [text (if (str/blank? content) topic (str topic "\n\n" content))
+        {:keys [net-bound secret-env]} (only-secret cfg "ANTHROPIC_API_KEY")
         env  {"OMP_TASK" (str "Translate this user question into natural English. Preserve meaning, "
                               "URLs, names, and code. Do not answer it and add no commentary.\n\n" text)
               "MANIFEST_URL" (:manifest-url cfg)
@@ -151,61 +152,44 @@ checkout untouched and only reconstruct the requested result.json.")
                       {:characters (character-count text)})))
     text))
 
-(defn- stage-task [stage question branch canonical-page]
-  (case stage
-    :progress
-    (str "USER QUESTION:\n" question
-         "\n\nThis is the intermediate pass. Investigate the question deeply enough to publish useful "
-         "preliminary findings now. Search several independent sources, prefer primary evidence, "
-         "create or update one canonical research page plus the necessary source pages, and state "
-         "what remains uncertain. The page must be useful on its own, never a placeholder. Then "
-         "git add -A, commit, and run: git push origin HEAD:refs/heads/" branch
-         "\n\nFinally write /work/result.json as strict JSON with one key, page. Its value must be "
-         "the canonical research page path, for example site/example-question.md. Do not put "
-         "Markdown fences around the JSON.")
+(defn- stage-task [question branch]
+  (str "USER QUESTION:\n" question
+       "\n\nResearch this question deeply. Search several independent sources, prefer primary "
+       "evidence, distinguish evidence from inference, and create or update one canonical research "
+       "page plus the necessary source pages. The canonical page must be a coherent, evidence-backed "
+       "answer, never notes or a placeholder. Then git add -A, commit, and run: git push origin "
+       "HEAD:refs/heads/" branch
+       "\n\nFinally write /work/result.json as strict JSON with exactly two keys: answer and page. "
+       "The answer value must answer the user's question directly in its first sentence and be "
+       "one short English paragraph with no citations, URLs, link or autolink syntax, "
+       "research-process recap, or throat-clearing; detailed reasoning and sources belong on "
+       "the wiki. The page value must be the canonical research page path, for example "
+       "site/example-question.md. Keep the answer plus two newlines plus "
+       "https://smith.wiki/<page-slug>/ within 500 Unicode characters. Do not put "
+       "Markdown fences around the JSON."))
 
-    :final
-    (str "Continue the SAME conversation and research question:\n" question
-         "\n\nThis is the final synthesis pass. Re-check the intermediate claims, resolve important "
-         "uncertainties with additional primary sources, and turn the canonical research page into "
-         "the best evidence-backed answer you can produce. The canonical page must remain exactly "
-         canonical-page ". Commit and run: git push origin "
-         "HEAD:refs/heads/" branch
-         "\n\nFinally write /work/result.json as strict JSON with exactly two keys: answer and page. "
-         "The answer value must answer the user's question directly in its first sentence and be "
-         "one short English paragraph with no citations, URLs, link or autolink syntax, "
-         "research-process recap, or throat-clearing; detailed reasoning and sources belong on "
-         "the wiki. The page value must be exactly " canonical-page ". Keep the answer plus two "
-         "newlines plus https://smith.wiki/<page-slug>/ within 500 Unicode characters. Do not put "
-         "Markdown fences around the JSON.")))
-
-(defn- retry-task [stage question branch canonical-page]
-  (str "RECOVER A PREVIOUSLY PUSHED " (str/upper-case (name stage)) " RESULT.\n\n"
+(defn- retry-task [question branch]
+  (str "RECOVER A PREVIOUSLY PUSHED RESULT.\n\n"
        "A prior attempt already pushed branch " branch ". The checkout is pinned to that exact "
        "remote commit. Do not edit files, reset, commit, or push. Inspect the existing branch and "
        "its diff from the base branch, then only recreate /work/result.json describing what is "
        "already in that commit.\n\n"
-       (if (= stage :progress)
-         (str "For this question:\n" question
-              "\n\nWrite strict JSON with exactly one string key, page. It must name the canonical "
-              "research page changed by this branch.")
-         (str "Continue the same conversation for this question:\n" question
-              "\n\nWrite strict JSON with exactly two string keys, answer and page. page must be "
-              "exactly " canonical-page " and must be changed by this branch. answer must be one "
-              "direct English paragraph with no citations, URLs, links, or autolinks, and answer "
-              "plus two newlines plus the canonical smith.wiki URL must fit within 500 Unicode "
-              "characters. This synthesis must describe the already-pushed research."))))
+       "For this question:\n" question
+       "\n\nWrite strict JSON with exactly two string keys, answer and page. page must name the "
+       "canonical research page changed by this branch. answer must be one direct English paragraph "
+       "with no citations, URLs, links, or autolinks, and answer plus two newlines plus the "
+       "canonical smith.wiki URL must fit within 500 Unicode characters."))
 
 (defn run-stage!
-  "Run one pass in the topic's persistent OMP session and push a review branch."
-  [cfg {:keys [stream topic id question stage continue? canonical-page]}]
+  "Run the research pass in the topic's persistent OMP session and push a review branch."
+  [cfg {:keys [stream topic id question continue?]}]
   (image/ensure!)
   (let [volume (volume-name stream topic)
-        branch (str "public-research/" (sha-prefix (str stream "\n" topic)) "-" id "-" (name stage))
+        branch (str "public-research/" (sha-prefix (str stream "\n" topic)) "-" id)
         _      (sandbox/ensure-volume! volume)
         env    {"HOME" "/work"
-                "OMP_TASK" (stage-task stage question branch canonical-page)
-                "OMP_RETRY_TASK" (retry-task stage question branch canonical-page)
+                "OMP_TASK" (stage-task question branch)
+                "OMP_RETRY_TASK" (retry-task question branch)
                 "OMP_CONTINUE" (str (boolean continue?))
                 "MANIFEST_URL" (:manifest-url cfg)
                 "MODEL_ID" (:model cfg)
@@ -258,13 +242,13 @@ checkout untouched and only reconstruct the requested result.json.")
                              :egress     (:egress cfg)
                              :timeout    "30m"
                              :memory     (or (:memory cfg) 2048)
-                             :name       (str "public-research-" id "-" (name stage))
+                             :name       (str "public-research-" id)
                              :argv       argv})]
     (when-not (zero? (:exit r))
-      (throw (ex-info "public research stage failed"
-                      {:stage stage :exit (:exit r) :err (str/trim (str (:err r)))})))
+      (throw (ex-info "public research pass failed"
+                      {:exit (:exit r) :err (str/trim (str (:err r)))})))
     (let [result   (result-json (:out r))
-          expected (if (= stage :final) #{:answer :page} #{:page})
+          expected #{:answer :page}
           commit   (some->> (str/split-lines (or (:out r) ""))
                             (filter #(str/starts-with? % "RESEARCH_COMMIT "))
                             last
@@ -273,21 +257,18 @@ checkout untouched and only reconstruct the requested result.json.")
                         (filter #(str/starts-with? % "RESEARCH_PAGE "))
                         (mapv #(subs % (count "RESEARCH_PAGE "))))]
       (when-not (= expected (set (keys result)))
-        (throw (ex-info "research stage produced invalid result.json"
-                        {:stage stage :expected expected :actual (set (keys result))})))
+        (throw (ex-info "research pass produced invalid result.json"
+                        {:expected expected :actual (set (keys result))})))
       (when-not (every? string? (vals result))
         (throw (ex-info "research stage result values must be strings"
-                        {:stage stage :result result})))
+                        {:result result})))
       (let [page   (:page result)
-            answer (when (= stage :final) (short-answer (:answer result)))]
+            answer (short-answer (:answer result))]
         (page-slug page)
-        (when (and (= stage :final) (not= canonical-page page))
-          (throw (ex-info "final research page differs from intermediate canonical page"
-                          {:expected canonical-page :actual page})))
         (when-not (and (seq commit) (some #{page} pages))
           (throw (ex-info "research result does not describe the pushed branch"
-                          {:stage stage :commit commit :page page :published pages})))
-        {:exit 0 :branch branch :commit commit :title (str topic " — " (name stage))
+                          {:commit commit :page page :published pages})))
+        {:exit 0 :branch branch :commit commit :title topic
          :answer answer :page page :volume volume}))))
 
 (defn- state-file [cfg]
@@ -313,9 +294,6 @@ checkout untouched and only reconstruct the requested result.json.")
     (reset! state (write-state! cfg next))
     next))
 
-(defn- wiki-url [accepted run]
-  (canonical-wiki-url accepted (:page run)))
-
 (defn- message-path [id] [:messages id])
 
 (defn- reply-at-most-once!
@@ -338,7 +316,7 @@ checkout untouched and only reconstruct the requested result.json.")
         qslug    (str "research-" id "-question")
         aslug    (str "research-" id "-answer")]
     (when-not (:translation (current))
-      (remember :translation (translate! cfg content)))
+      (remember :translation (translate! cfg topic content)))
     (let [translation (:translation (current))]
       (when-not (:question-post (current))
         (remember :question-post
@@ -350,46 +328,23 @@ checkout untouched and only reconstruct the requested result.json.")
        (str "**English translation · queued for Threads**\n\n" translation
             "\n\n[Publication commit](" (get-in (current) [:question-post :url]) ")"))
 
-      (if-let [progress-run (:progress-run (current))]
-        ;; Heal state written by versions that checkpointed these separately.
-        (when-not (get-in @state (conj topic-p :session-started?))
-          (checkpoint! cfg state #(assoc-in % (conj topic-p :session-started?) true)))
+      (when-not (:research-run (current))
         (let [run (run-stage! cfg {:stream stream :topic topic :id id :question translation
-                                   :stage :progress
                                    :continue? (boolean
                                                (get-in @state
                                                        (conj topic-p :session-started?)))})]
           (checkpoint! cfg state
                        #(-> %
-                            (assoc-in (conj path :progress-run) run)
+                            (assoc-in (conj path :research-run) run)
                             (assoc-in (conj topic-p :session-started?) true)))))
-      (when-not (:progress (current))
-        (let [accepted (research/accept! cfg (:progress-run (current)))]
-          (when-not accepted (throw (ex-info "could not publish intermediate wiki result" {:id id})))
-          (research/changelog! cfg (assoc accepted :title (str topic " — intermediate")))
-          (remember :progress accepted)))
-      (reply-at-most-once!
-       cfg source state path :progress-echoed? message
-       (wiki-url (:progress (current)) (:progress-run (current))))
-
-      (when-not (:final-run (current))
-        (remember :final-run
-                  (run-stage! cfg {:stream stream :topic topic :id id :question translation
-                                   :stage :final :continue? true
-                                   :canonical-page (:page (:progress-run (current)))})))
-      (when-not (= (:page (:progress-run (current)))
-                   (:page (:final-run (current))))
-        (throw (ex-info "final research page differs from intermediate canonical page"
-                        {:expected (:page (:progress-run (current)))
-                         :actual (:page (:final-run (current)))})))
-      (when-not (:final (current))
-        (let [accepted (research/accept! cfg (:final-run (current)))]
-          (when-not accepted (throw (ex-info "could not publish final wiki result" {:id id})))
-          (research/changelog! cfg (assoc accepted :title (str topic " — final")))
-          (remember :final accepted)))
-      (let [answer (answer-text (:answer (:final-run (current)))
-                                (:final (current))
-                                (:page (:final-run (current))))]
+      (when-not (:accepted (current))
+        (let [accepted (research/accept! cfg (:research-run (current)))]
+          (when-not accepted (throw (ex-info "could not publish wiki result" {:id id})))
+          (research/changelog! cfg (assoc accepted :title topic))
+          (remember :accepted accepted)))
+      (let [answer (answer-text (:answer (:research-run (current)))
+                                (:accepted (current))
+                                (:page (:research-run (current))))]
         (when-not (:answer-post (current))
           (remember :answer-post
                     (threads/enqueue! (:threads cfg)
